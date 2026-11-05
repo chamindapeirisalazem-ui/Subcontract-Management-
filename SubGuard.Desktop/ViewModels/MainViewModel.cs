@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Globalization;
+using System.Windows.Data;
 using Microsoft.Data.Sqlite;
 using SubGuard.Core.Domain;
 using SubGuard.Core.Models;
@@ -29,17 +31,56 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private Subcontractor? _selectedSovSubcontractor;
     private ScheduleLineViewModel? _selectedScheduleLine;
     private int _selectedTabIndex;
+    private string _projectSearchText = string.Empty;
+    private string _projectStatusFilter = "All";
+    private string _projectsError = string.Empty;
+    private Project? _selectedProject;
+    private string _projectNumber = string.Empty;
+    private string _projectName = string.Empty;
+    private string _projectOwner = string.Empty;
+    private ProjectStatus _projectStatus = ProjectStatus.Active;
+    private int _subcontractProjectId;
+    private SubcontractRow? _selectedSubcontractRow;
+    private string _subcontractComplianceStatus = string.Empty;
 
     public MainViewModel(SubGuardRepository repository, ApprovalViewModel approvalWorkflow)
     {
         _repository = repository;
         ApprovalWorkflow = approvalWorkflow;
         ApprovalWorkflow.NavigateToMainTabRequested += NavigateToMainTab;
+        ApprovalWorkflow.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ApprovalViewModel.SelectedApplication))
+            {
+                OnPropertyChanged(nameof(ContextLine));
+            }
+        };
         Subcontractors = [];
         PayApplications = [];
         AuditEntries = [];
         ScheduleLines = [];
         ClaimLines = [];
+        Projects = [];
+        ProjectChoices = [];
+        SubcontractRows = [];
+        ProjectSubcontracts = [];
+        SubcontractPayApplications = [];
+        SubcontractCompliance = [];
+        ValidationRows = [];
+        ProjectsView = CollectionViewSource.GetDefaultView(Projects);
+        ProjectsView.Filter = FilterProject;
+        ProjectsView.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ProjectsEmptyMessage));
+
+        NewProjectCommand = new RelayCommand(NewProject);
+        SaveProjectCommand = new RelayCommand(
+            SaveProject,
+            () => !string.IsNullOrWhiteSpace(ProjectNumber) && !string.IsNullOrWhiteSpace(ProjectName));
+        DeleteProjectCommand = new RelayCommand(DeleteProject, () => SelectedProject is not null);
+        ClearProjectFiltersCommand = new RelayCommand(() =>
+        {
+            ProjectSearchText = string.Empty;
+            ProjectStatusFilter = "All";
+        });
 
         NewSubcontractorCommand = new RelayCommand(NewSubcontractor);
         SaveSubcontractorCommand = new RelayCommand(SaveSubcontractor, () => !string.IsNullOrWhiteSpace(SubcontractorName));
@@ -63,10 +104,175 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<ScheduleLineViewModel> ScheduleLines { get; }
     public ObservableCollection<ClaimEntryLineViewModel> ClaimLines { get; }
     public ApprovalViewModel ApprovalWorkflow { get; }
+    public ObservableCollection<Project> Projects { get; }
+    public ICollectionView ProjectsView { get; }
+    public ObservableCollection<ProjectChoice> ProjectChoices { get; }
+    public ObservableCollection<SubcontractRow> SubcontractRows { get; }
+    public ObservableCollection<SubcontractRow> ProjectSubcontracts { get; }
+    public ObservableCollection<PayApplication> SubcontractPayApplications { get; }
+    public ObservableCollection<ComplianceRecord> SubcontractCompliance { get; }
+    public ObservableCollection<ValidationRow> ValidationRows { get; }
+    public IReadOnlyList<string> ProjectStatusFilters { get; } = ["All", "Active", "Closed"];
+    public IReadOnlyList<ProjectStatus> ProjectStatuses { get; } = [ProjectStatus.Active, ProjectStatus.Closed];
+    public RelayCommand NewProjectCommand { get; }
+    public RelayCommand SaveProjectCommand { get; }
+    public RelayCommand DeleteProjectCommand { get; }
+    public RelayCommand ClearProjectFiltersCommand { get; }
+
+    private static readonly string[] PageNames = ["Projects", "Subcontracts", "Pay applications", "Compliance", "Audit history"];
+
+    public string PageName => PageNames[Math.Clamp(SelectedTabIndex, 0, PageNames.Length - 1)];
+
+    public string ContextLine => SelectedTabIndex switch
+    {
+        0 when SelectedProject is not null => $"Projects  ›  {SelectedProject.ProjectNumber} {SelectedProject.Name}",
+        1 when SelectedSubcontractor is not null => $"Subcontracts  ›  {SelectedSubcontractor.Name}",
+        2 when SelectedPayApplication is not null => $"Pay applications  ›  {SelectedPayApplication.ApplicationNumber} ({SelectedPayApplication.SubcontractorName})",
+        3 when ApprovalWorkflow.SelectedApplication is not null => $"Compliance  ›  {ApprovalWorkflow.SelectedApplication.ApplicationNumber}",
+        _ => PageName
+    };
+
+    public string ProjectSearchText
+    {
+        get => _projectSearchText;
+        set
+        {
+            if (SetProperty(ref _projectSearchText, value))
+            {
+                ProjectsView.Refresh();
+                OnPropertyChanged(nameof(ProjectsEmptyMessage));
+            }
+        }
+    }
+
+    public string ProjectStatusFilter
+    {
+        get => _projectStatusFilter;
+        set
+        {
+            if (SetProperty(ref _projectStatusFilter, value))
+            {
+                ProjectsView.Refresh();
+                OnPropertyChanged(nameof(ProjectsEmptyMessage));
+            }
+        }
+    }
+
+    public string ProjectsError
+    {
+        get => _projectsError;
+        private set => SetProperty(ref _projectsError, value);
+    }
+
+    public string ProjectsEmptyMessage
+    {
+        get
+        {
+            if (Projects.Count == 0)
+            {
+                return "No projects yet. Use New project to add the first one.";
+            }
+
+            return ProjectsView.IsEmpty ? "No projects match the current search or status filter." : string.Empty;
+        }
+    }
+
+    public bool ProjectsFilteredEmpty => Projects.Count > 0 && ProjectsView.IsEmpty;
+
+    public Project? SelectedProject
+    {
+        get => _selectedProject;
+        set
+        {
+            if (!SetProperty(ref _selectedProject, value))
+            {
+                return;
+            }
+
+            ProjectNumber = value?.ProjectNumber ?? string.Empty;
+            ProjectName = value?.Name ?? string.Empty;
+            ProjectOwner = value?.OwnerName ?? string.Empty;
+            ProjectStatus = value?.Status ?? ProjectStatus.Active;
+            ReplaceItems(
+                ProjectSubcontracts,
+                value is null ? [] : SubcontractRows.Where(row => row.Subcontractor.ProjectId == value.Id));
+            DeleteProjectCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(ContextLine));
+        }
+    }
+
+    public string ProjectNumber
+    {
+        get => _projectNumber;
+        set
+        {
+            if (SetProperty(ref _projectNumber, value))
+            {
+                SaveProjectCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string ProjectName
+    {
+        get => _projectName;
+        set
+        {
+            if (SetProperty(ref _projectName, value))
+            {
+                SaveProjectCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
+
+    public string ProjectOwner
+    {
+        get => _projectOwner;
+        set => SetProperty(ref _projectOwner, value);
+    }
+
+    public ProjectStatus ProjectStatus
+    {
+        get => _projectStatus;
+        set => SetProperty(ref _projectStatus, value);
+    }
+
+    public int SubcontractProjectId
+    {
+        get => _subcontractProjectId;
+        set => SetProperty(ref _subcontractProjectId, value);
+    }
+
+    public SubcontractRow? SelectedSubcontractRow
+    {
+        get => _selectedSubcontractRow;
+        set
+        {
+            if (SetProperty(ref _selectedSubcontractRow, value) &&
+                SelectedSubcontractor?.Id != value?.Subcontractor.Id)
+            {
+                SelectedSubcontractor = value?.Subcontractor;
+            }
+        }
+    }
+
+    public string SubcontractComplianceStatus
+    {
+        get => _subcontractComplianceStatus;
+        private set => SetProperty(ref _subcontractComplianceStatus, value);
+    }
+
     public int SelectedTabIndex
     {
         get => _selectedTabIndex;
-        set => SetProperty(ref _selectedTabIndex, value);
+        set
+        {
+            if (SetProperty(ref _selectedTabIndex, value))
+            {
+                OnPropertyChanged(nameof(PageName));
+                OnPropertyChanged(nameof(ContextLine));
+            }
+        }
     }
 
     public string StatusMessage
@@ -140,7 +346,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             OriginalContractValueText = value?.OriginalContractValue.ToString(CultureInfo.CurrentCulture) ?? "0";
             ApprovedChangeOrderTotalText = value?.ApprovedChangeOrderTotal.ToString(CultureInfo.CurrentCulture) ?? "0";
             RetainagePercentText = value?.RetainagePercent.ToString(CultureInfo.CurrentCulture) ?? "0";
+            SubcontractProjectId = value?.ProjectId ?? 0;
+            SelectedSovSubcontractor = value is null
+                ? null
+                : Subcontractors.FirstOrDefault(item => item.Id == value.Id);
+            SelectedSubcontractRow = value is null
+                ? null
+                : SubcontractRows.FirstOrDefault(row => row.Subcontractor.Id == value.Id);
+            LoadSubcontractDetail(value);
             DeleteSubcontractorCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(ContextLine));
         }
     }
 
@@ -225,6 +440,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             PeriodEnd = value?.PeriodEnd;
             Notes = value?.Notes ?? string.Empty;
             DeletePayApplicationCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(ContextLine));
             ReloadClaimLines();
             UpdateClaimValidation();
         }
@@ -283,6 +499,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         OriginalContractValueText = "0";
         ApprovedChangeOrderTotalText = "0";
         RetainagePercentText = "0";
+        SubcontractProjectId = 0;
         StatusMessage = "Enter the subcontractor details and save.";
     }
 
@@ -310,7 +527,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 Phone = Phone,
                 OriginalContractValue = originalValue,
                 ApprovedChangeOrderTotal = changeOrderTotal,
-                RetainagePercent = retainagePercent
+                RetainagePercent = retainagePercent,
+                ProjectId = SubcontractProjectId == 0 ? null : SubcontractProjectId
             });
             RefreshData();
             NewSubcontractor();
@@ -476,7 +694,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                     PreviouslyBilledSnapshot = line.PreviouslyBilledSnapshot
                 }).ToArray());
             ReplaceItems(ScheduleLines, savedLines.Select(ToViewModel));
+            var scheduleSubcontractorId = SelectedSovSubcontractor.Id;
             RefreshData();
+            SelectedSubcontractor = Subcontractors.FirstOrDefault(item => item.Id == scheduleSubcontractorId);
             StatusMessage = "Schedule of values saved.";
         }
         catch (ArgumentException exception)
@@ -511,6 +731,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ValidationSummary = errors.Count == 0
             ? "R3 and R4 checks pass. Claim is ready to save."
             : string.Join(Environment.NewLine, errors);
+        ReplaceItems(
+            ValidationRows,
+            errors.Count == 0
+                ? [new ValidationRow("R3", "Pass", "Each line stays within its scheduled value."),
+                   new ValidationRow("R4", "Pass", "Cumulative billing stays within the contract value.")]
+                : errors.Select(error => new ValidationRow("Check", "Fail", error)));
         SavePayApplicationCommand.NotifyCanExecuteChanged();
     }
 
@@ -649,15 +875,157 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private void RefreshData()
     {
         ApprovalWorkflow.InvalidatePreview();
+        var selectedProjectId = SelectedProject?.Id;
         SelectedSubcontractor = null;
+        SelectedProject = null;
         SelectedPayApplication = null;
         SelectedApplicationSubcontractor = null;
         SelectedSovSubcontractor = null;
         ReplaceItems(Subcontractors, _repository.GetSubcontractors());
         ReplaceItems(PayApplications, _repository.GetPayApplications());
         ReplaceItems(AuditEntries, _repository.GetAuditEntries());
-        SelectedSovSubcontractor = Subcontractors.FirstOrDefault();
+        LoadProjects();
+        SelectedProject = Projects.FirstOrDefault(project => project.Id == selectedProjectId);
         UpdateClaimValidation();
+    }
+
+    private void LoadProjects()
+    {
+        try
+        {
+            var projects = _repository.GetProjects();
+            ReplaceItems(Projects, projects);
+            ProjectsError = string.Empty;
+            ReplaceItems(
+                ProjectChoices,
+                new[] { new ProjectChoice(0, "(No project)") }
+                    .Concat(projects.Select(project => new ProjectChoice(project.Id, $"{project.ProjectNumber} — {project.Name}"))));
+            var labels = projects.ToDictionary(project => project.Id, project => project.ProjectNumber);
+            ReplaceItems(
+                SubcontractRows,
+                Subcontractors.Select(subcontractor => new SubcontractRow(
+                    subcontractor,
+                    subcontractor.ProjectId is { } projectId && labels.TryGetValue(projectId, out var label) ? label : "—",
+                    GetComplianceStatus(_repository.GetComplianceRecords(subcontractor.Id)))));
+        }
+        catch (SqliteException exception)
+        {
+            ProjectsError = $"Projects could not be loaded: {exception.Message}";
+        }
+
+        OnPropertyChanged(nameof(ProjectsEmptyMessage));
+        OnPropertyChanged(nameof(ProjectsFilteredEmpty));
+    }
+
+    private static string GetComplianceStatus(IReadOnlyList<ComplianceRecord> records)
+    {
+        if (records.Count == 0)
+        {
+            return "No records";
+        }
+
+        foreach (var status in new[] { "Expired", "Expiry missing", "Expires today" })
+        {
+            if (records.Any(record => record.CurrentDayStatus == status))
+            {
+                return status;
+            }
+        }
+
+        return "Current";
+    }
+
+    private void LoadSubcontractDetail(Subcontractor? subcontractor)
+    {
+        if (subcontractor is null)
+        {
+            SubcontractPayApplications.Clear();
+            SubcontractCompliance.Clear();
+            SubcontractComplianceStatus = string.Empty;
+            return;
+        }
+
+        ReplaceItems(
+            SubcontractPayApplications,
+            PayApplications.Where(application => application.SubcontractorId == subcontractor.Id));
+        var records = _repository.GetComplianceRecords(subcontractor.Id);
+        ReplaceItems(SubcontractCompliance, records);
+        SubcontractComplianceStatus = GetComplianceStatus(records);
+    }
+
+    private bool FilterProject(object item)
+    {
+        if (item is not Project project)
+        {
+            return false;
+        }
+
+        if (ProjectStatusFilter != "All" && project.Status.ToString() != ProjectStatusFilter)
+        {
+            return false;
+        }
+
+        var term = ProjectSearchText.Trim();
+        return term.Length == 0 ||
+               project.ProjectNumber.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
+               project.Name.Contains(term, StringComparison.CurrentCultureIgnoreCase) ||
+               project.OwnerName.Contains(term, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private void NewProject()
+    {
+        SelectedProject = null;
+        ProjectNumber = string.Empty;
+        ProjectName = string.Empty;
+        ProjectOwner = string.Empty;
+        ProjectStatus = ProjectStatus.Active;
+        ProjectsError = string.Empty;
+        StatusMessage = "Enter the project details and save.";
+    }
+
+    private void SaveProject()
+    {
+        try
+        {
+            var saved = _repository.SaveProject(new Project
+            {
+                Id = SelectedProject?.Id ?? 0,
+                ProjectNumber = ProjectNumber,
+                Name = ProjectName,
+                OwnerName = ProjectOwner,
+                Status = ProjectStatus
+            });
+            RefreshData();
+            SelectedProject = Projects.FirstOrDefault(project => project.Id == saved.Id);
+            ProjectsError = string.Empty;
+            StatusMessage = "Project saved.";
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or SqliteException)
+        {
+            ProjectsError = exception.Message;
+            StatusMessage = "Project not saved.";
+        }
+    }
+
+    private void DeleteProject()
+    {
+        if (SelectedProject is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var deleted = _repository.DeleteProject(SelectedProject.Id);
+            RefreshData();
+            NewProject();
+            StatusMessage = deleted ? "Project deleted." : "This project was already removed.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or SqliteException)
+        {
+            ProjectsError = exception.Message;
+            StatusMessage = "Project not deleted.";
+        }
     }
 
     private void NavigateToMainTab(int tabIndex)
@@ -668,7 +1036,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         {
             SelectedPayApplication = PayApplications.FirstOrDefault(item => item.Id == application.Id);
         }
-        else if (tabIndex == 0 && application is not null)
+        else if (tabIndex == 1 && application is not null)
         {
             SelectedSubcontractor = Subcontractors.FirstOrDefault(item => item.Id == application.SubcontractorId);
         }

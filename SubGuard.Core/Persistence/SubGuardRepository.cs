@@ -38,7 +38,7 @@ public sealed partial class SubGuardRepository : IDisposable
         using var command = _connection.CreateCommand();
         command.CommandText = """
             SELECT id, name, contact_name, email, phone, original_contract_value,
-                   approved_change_order_total, retainage_percent
+                   approved_change_order_total, retainage_percent, project_id
             FROM subcontractors
             ORDER BY name COLLATE NOCASE, id;
             """;
@@ -56,11 +56,134 @@ public sealed partial class SubGuardRepository : IDisposable
                 Phone = reader.GetString(4),
                 OriginalContractValue = decimal.Parse(reader.GetString(5), CultureInfo.InvariantCulture),
                 ApprovedChangeOrderTotal = decimal.Parse(reader.GetString(6), CultureInfo.InvariantCulture),
-                RetainagePercent = decimal.Parse(reader.GetString(7), CultureInfo.InvariantCulture)
+                RetainagePercent = decimal.Parse(reader.GetString(7), CultureInfo.InvariantCulture),
+                ProjectId = reader.IsDBNull(8) ? null : reader.GetInt32(8)
             });
         }
 
         return items;
+    }
+
+    public IReadOnlyList<Project> GetProjects()
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, project_number, name, owner_name, status
+            FROM projects
+            ORDER BY project_number COLLATE NOCASE, id;
+            """;
+
+        using var reader = command.ExecuteReader();
+        var items = new List<Project>();
+        while (reader.Read())
+        {
+            items.Add(new Project
+            {
+                Id = reader.GetInt32(0),
+                ProjectNumber = reader.GetString(1),
+                Name = reader.GetString(2),
+                OwnerName = reader.GetString(3),
+                Status = Enum.Parse<ProjectStatus>(reader.GetString(4), ignoreCase: true)
+            });
+        }
+
+        return items;
+    }
+
+    public Project SaveProject(Project project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        var number = Required(project.ProjectNumber, nameof(project.ProjectNumber));
+        var name = Required(project.Name, nameof(project.Name));
+        if (!Enum.IsDefined(project.Status))
+        {
+            throw new ArgumentOutOfRangeException(nameof(project), "Project status must be Active or Closed.");
+        }
+
+        using var transaction = _connection.BeginTransaction();
+        int id;
+        string action;
+        try
+        {
+            using var command = _connection.CreateCommand();
+            command.Transaction = transaction;
+            if (project.Id == 0)
+            {
+                command.CommandText = """
+                    INSERT INTO projects (project_number, name, owner_name, status)
+                    VALUES ($number, $name, $owner, $status)
+                    RETURNING id;
+                    """;
+                action = "Created";
+            }
+            else
+            {
+                command.CommandText = """
+                    UPDATE projects
+                    SET project_number = $number, name = $name, owner_name = $owner, status = $status
+                    WHERE id = $id
+                    RETURNING id;
+                    """;
+                command.Parameters.AddWithValue("$id", project.Id);
+                action = "Updated";
+            }
+
+            command.Parameters.AddWithValue("$number", number);
+            command.Parameters.AddWithValue("$name", name);
+            command.Parameters.AddWithValue("$owner", project.OwnerName.Trim());
+            command.Parameters.AddWithValue("$status", project.Status.ToString());
+            var result = command.ExecuteScalar();
+            if (result is null)
+            {
+                throw new InvalidOperationException($"Project {project.Id} no longer exists.");
+            }
+
+            id = Convert.ToInt32(result, CultureInfo.InvariantCulture);
+        }
+        catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+        {
+            throw new InvalidOperationException($"Project number '{number}' is already in use.", exception);
+        }
+
+        AddAuditEntry(transaction, "Project", id, action, $"{number} {name}");
+        transaction.Commit();
+        return project with { Id = id, ProjectNumber = number, Name = name };
+    }
+
+    public bool DeleteProject(int id)
+    {
+        using var transaction = _connection.BeginTransaction();
+        using var infoCommand = _connection.CreateCommand();
+        infoCommand.Transaction = transaction;
+        infoCommand.CommandText = """
+            SELECT project_number, (SELECT COUNT(*) FROM subcontractors WHERE project_id = $id)
+            FROM projects WHERE id = $id;
+            """;
+        infoCommand.Parameters.AddWithValue("$id", id);
+        string number;
+        using (var reader = infoCommand.ExecuteReader())
+        {
+            if (!reader.Read())
+            {
+                return false;
+            }
+
+            number = reader.GetString(0);
+            if (reader.GetInt64(1) > 0)
+            {
+                throw new InvalidOperationException(
+                    "This project still has subcontracts. Reassign or delete them first, or close the project instead.");
+            }
+        }
+
+        using var command = _connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "DELETE FROM projects WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", id);
+        command.ExecuteNonQuery();
+        AddAuditEntry(transaction, "Project", id, "Deleted", number);
+        transaction.Commit();
+        return true;
     }
 
     public IReadOnlyList<PayApplication> GetPayApplications()
@@ -189,8 +312,8 @@ public sealed partial class SubGuardRepository : IDisposable
             command.Transaction = transaction;
             command.CommandText = """
                 INSERT INTO subcontractors
-                    (name, contact_name, email, phone, original_contract_value, approved_change_order_total, retainage_percent)
-                VALUES ($name, $contact, $email, $phone, $originalValue, $changeOrders, $retainage)
+                    (name, contact_name, email, phone, original_contract_value, approved_change_order_total, retainage_percent, project_id)
+                VALUES ($name, $contact, $email, $phone, $originalValue, $changeOrders, $retainage, $projectId)
                 RETURNING id;
                 """;
             AddSubcontractorParameters(command, subcontractor, name);
@@ -206,7 +329,8 @@ public sealed partial class SubGuardRepository : IDisposable
                 SET name = $name, contact_name = $contact, email = $email, phone = $phone,
                     original_contract_value = $originalValue,
                     approved_change_order_total = $changeOrders,
-                    retainage_percent = $retainage
+                    retainage_percent = $retainage,
+                    project_id = $projectId
                 WHERE id = $id;
                 """;
             AddSubcontractorParameters(command, subcontractor, name);
@@ -733,6 +857,14 @@ public sealed partial class SubGuardRepository : IDisposable
     {
         using var command = _connection.CreateCommand();
         command.CommandText = """
+            CREATE TABLE IF NOT EXISTS projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_number TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                name TEXT NOT NULL,
+                owner_name TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'Active'
+            );
+
             CREATE TABLE IF NOT EXISTS subcontractors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
@@ -837,8 +969,9 @@ public sealed partial class SubGuardRepository : IDisposable
         EnsureColumn("pay_applications", "approved_at", "TEXT NULL");
         EnsureColumn("pay_applications", "invoice_reconciliation_status", "TEXT NOT NULL DEFAULT 'Pending'");
         EnsureColumn("pay_applications", "retainage_percent_snapshot", "TEXT NOT NULL DEFAULT '0'");
+        EnsureColumn("subcontractors", "project_id", "INTEGER NULL REFERENCES projects(id) ON DELETE RESTRICT");
         using var versionCommand = _connection.CreateCommand();
-        versionCommand.CommandText = "PRAGMA user_version = 2;";
+        versionCommand.CommandText = "PRAGMA user_version = 3;";
         versionCommand.ExecuteNonQuery();
     }
 
@@ -878,6 +1011,7 @@ public sealed partial class SubGuardRepository : IDisposable
         command.Parameters.AddWithValue("$originalValue", subcontractor.OriginalContractValue.ToString(CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$changeOrders", subcontractor.ApprovedChangeOrderTotal.ToString(CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$retainage", subcontractor.RetainagePercent.ToString(CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$projectId", (object?)subcontractor.ProjectId ?? DBNull.Value);
     }
 
     private static void AddPayApplicationParameters(

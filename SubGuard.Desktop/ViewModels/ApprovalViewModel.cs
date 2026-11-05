@@ -755,7 +755,7 @@ public sealed class ApprovalViewModel : ObservableObject, IDisposable
                 NavigateToMainTabRequested?.Invoke(2);
                 break;
             case "R4":
-                NavigateToMainTabRequested?.Invoke(0);
+                NavigateToMainTabRequested?.Invoke(1);
                 break;
         }
     }
