@@ -80,7 +80,7 @@
             </Border>
         </Grid>
 
-        <TabControl Grid.Row="1" Background="White" BorderBrush="#E2E8F0">
+        <TabControl Grid.Row="1" Background="White" BorderBrush="#E2E8F0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
             <TabItem Header="Subcontractors" Padding="16,9">
                 <Grid Margin="16">
                     <Grid.ColumnDefinitions>
@@ -114,6 +114,8 @@
                                 <TextBox Text="{Binding OriginalContractValueText, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Approved change orders" Foreground="{StaticResource MutedBrush}" />
                                 <TextBox Text="{Binding ApprovedChangeOrderTotalText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Retainage percent" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox Text="{Binding RetainagePercentText, UpdateSourceTrigger=PropertyChanged}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="New" Command="{Binding NewSubcontractorCommand}" />
                                     <Button Content="Save" Command="{Binding SaveSubcontractorCommand}" Style="{StaticResource PrimaryButton}" />
@@ -213,6 +215,193 @@
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Approval workspace" Padding="16,9">
+                <Grid Margin="16" DataContext="{Binding ApprovalWorkflow}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                        <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" />
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Pay application" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />
+                            <ComboBox Width="310"
+                                      ItemsSource="{Binding Applications}"
+                                      SelectedItem="{Binding SelectedApplication, Mode=TwoWay}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding ApplicationNumber}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Text="{Binding SelectedApplication.Status}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="8,0,12,0" />
+                            <Button Content="Submit" Command="{Binding SubmitCommand}" Style="{StaticResource PrimaryButton}" />
+                            <Button Content="Pass R1" Command="{Binding CompleteComplianceReviewCommand}" />
+                            <Button Content="Pass R1 + R2" Command="{Binding CompleteWaiverReviewCommand}" />
+                            <Button Content="Approve (R1–R5)" Command="{Binding ApproveCommand}" Style="{StaticResource PrimaryButton}" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <DataGrid Grid.Row="1" ItemsSource="{Binding Rules}" Height="178" Margin="0,0,0,10">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Rule" Binding="{Binding RuleCode}" Width="55" />
+                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="95" />
+                            <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="1.1*" />
+                            <DataGridTextColumn Header="Comparison" Binding="{Binding Comparison}" Width="1.7*" />
+                            <DataGridTextColumn Header="Result / candidate details" Binding="{Binding DetailText}" Width="1.8*" />
+                            <DataGridTemplateColumn Header="Go to" Width="70">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="Open"
+                                                Command="{Binding DataContext.GoToRuleCommand, RelativeSource={RelativeSource AncestorType={x:Type DataGrid}}}"
+                                                CommandParameter="{Binding RuleCode}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TabControl Grid.Row="2" Background="White" BorderBrush="#E2E8F0"
+                                SelectedIndex="{Binding SelectedEvidenceTabIndex, Mode=TwoWay}">
+                        <TabItem Header="Compliance evidence">
+                            <Grid Margin="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.2*" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="0.8*" />
+                                </Grid.ColumnDefinitions>
+                                <DataGrid Grid.Column="0" ItemsSource="{Binding ComplianceRecords}"
+                                          SelectedItem="{Binding SelectedComplianceRecord, Mode=TwoWay}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="*" />
+                                        <DataGridTextColumn Header="Document number" Binding="{Binding DocumentNumber}" Width="1.5*" />
+                                        <DataGridTextColumn Header="Expires" Binding="{Binding ExpiryDate, StringFormat={}{0:yyyy-MM-dd}}" Width="*" />
+                                        <DataGridTextColumn Header="Today" Binding="{Binding CurrentDayStatus}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <TextBlock Text="Evidence details" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                        <TextBlock Text="Type" Foreground="{StaticResource MutedBrush}" />
+                                        <ComboBox ItemsSource="{Binding ComplianceTypes}" SelectedItem="{Binding ComplianceType}" />
+                                        <TextBlock Text="Document number" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding DocumentNumber, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Expiry date" Foreground="{StaticResource MutedBrush}" />
+                                        <DatePicker SelectedDate="{Binding ExpiryDate, Mode=TwoWay}" />
+                                        <TextBlock Text="Linked file path" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding ComplianceFilePath, UpdateSourceTrigger=PropertyChanged}" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="New" Command="{Binding NewComplianceCommand}" />
+                                            <Button Content="Save" Command="{Binding SaveComplianceCommand}" Style="{StaticResource PrimaryButton}" />
+                                            <Button Content="Delete" Command="{Binding DeleteComplianceCommand}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="Lien waivers">
+                            <Grid Margin="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.2*" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="0.8*" />
+                                </Grid.ColumnDefinitions>
+                                <DataGrid Grid.Column="0" ItemsSource="{Binding Waivers}"
+                                          SelectedItem="{Binding SelectedWaiver, Mode=TwoWay}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="*" />
+                                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*" />
+                                        <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="*" />
+                                        <DataGridTextColumn Header="Signed at" Binding="{Binding SignedAt, StringFormat={}{0:yyyy-MM-dd}}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <TextBlock Text="Waiver details" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                        <TextBlock Text="Type" Foreground="{StaticResource MutedBrush}" />
+                                        <ComboBox ItemsSource="{Binding WaiverTypes}" SelectedItem="{Binding WaiverType}" />
+                                        <TextBlock Text="Status" Foreground="{StaticResource MutedBrush}" />
+                                        <ComboBox ItemsSource="{Binding WaiverStatuses}" SelectedItem="{Binding WaiverStatus}" />
+                                        <TextBlock Text="Waiver amount" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding WaiverAmountText, UpdateSourceTrigger=PropertyChanged}" />
+                                        <TextBlock Text="Signed date (metadata)" Foreground="{StaticResource MutedBrush}" />
+                                        <DatePicker SelectedDate="{Binding WaiverSignedAt, Mode=TwoWay}" />
+                                        <TextBlock Text="Linked file path (metadata)" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBox Text="{Binding WaiverFilePath, UpdateSourceTrigger=PropertyChanged}" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="New" Command="{Binding NewWaiverCommand}" />
+                                            <Button Content="Save" Command="{Binding SaveWaiverCommand}" Style="{StaticResource PrimaryButton}" />
+                                            <Button Content="Delete" Command="{Binding DeleteWaiverCommand}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Grid>
+                        </TabItem>
+                        <TabItem Header="Invoices">
+                            <Grid Margin="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="1.1*" />
+                                    <ColumnDefinition Width="16" />
+                                    <ColumnDefinition Width="1*" />
+                                </Grid.ColumnDefinitions>
+                                <DataGrid Grid.Column="0" ItemsSource="{Binding Invoices}"
+                                          SelectedItem="{Binding SelectedInvoice, Mode=TwoWay}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Invoice" Binding="{Binding InvoiceNumber}" Width="*" />
+                                        <DataGridTextColumn Header="Derived line total" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="1.3*" />
+                                        <DataGridTextColumn Header="R5" Binding="{Binding ReconciliationStatus}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <Grid Grid.Column="2">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0">
+                                        <TextBlock Text="Invoice details" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                        <DockPanel>
+                                            <TextBox Width="190" Text="{Binding InvoiceNumber, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBox Text="{Binding InvoiceProvenance, UpdateSourceTrigger=PropertyChanged}" ToolTip="Provenance (manual for this milestone)" />
+                                        </DockPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                            <Button Content="Add line" Command="{Binding AddInvoiceLineCommand}" />
+                                            <Button Content="Remove line" Command="{Binding RemoveInvoiceLineCommand}" />
+                                            <TextBlock Text="Combined invoice line total:" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" />
+                                            <TextBlock Text="{Binding InvoiceLineTotal, StringFormat={}{0:N2}}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                    <DataGrid Grid.Row="1" ItemsSource="{Binding InvoiceLines}"
+                                              SelectedItem="{Binding SelectedInvoiceLine, Mode=TwoWay}"
+                                              IsReadOnly="False" CanUserAddRows="False">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Line description" Binding="{Binding Description, UpdateSourceTrigger=PropertyChanged}" Width="2*" />
+                                            <DataGridTextColumn Header="Amount" Binding="{Binding Amount, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <DockPanel Grid.Row="2" Margin="0,8,0,0">
+                                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                            <TextBlock Text="R6 retainage (informational): " Foreground="{StaticResource MutedBrush}" />
+                                            <TextBlock Text="{Binding RetainagePercent, StringFormat={}{0:N2}%}" Foreground="{StaticResource MutedBrush}" />
+                                            <TextBlock Text=" = " Foreground="{StaticResource MutedBrush}" />
+                                            <TextBlock Text="{Binding RetainageAmount, StringFormat={}{0:N2}}" Foreground="{StaticResource MutedBrush}" />
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="New" Command="{Binding NewInvoiceCommand}" />
+                                            <Button Content="Save invoice" Command="{Binding SaveInvoiceCommand}" Style="{StaticResource PrimaryButton}" />
+                                            <Button Content="Delete" Command="{Binding DeleteInvoiceCommand}" />
+                                        </StackPanel>
+                                    </DockPanel>
+                                </Grid>
+                            </Grid>
+                        </TabItem>
+                    </TabControl>
+                    <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Foreground="{StaticResource MutedBrush}" Margin="2,10,0,0" />
                 </Grid>
             </TabItem>
 

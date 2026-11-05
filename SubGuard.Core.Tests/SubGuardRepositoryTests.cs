@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using SubGuard.Core.Domain;
 using SubGuard.Core.Models;
 using SubGuard.Core.Persistence;
 
@@ -289,6 +290,9 @@ public sealed class SubGuardRepositoryTests
         Assert.Equal(0m, subcontractor.OriginalContractValue);
         Assert.Equal(ClaimStatus.Approved, claim.Status);
         Assert.Equal(250m, claim.Amount);
+        Assert.Equal(0m, claim.RetainagePercent);
+        Assert.Null(claim.SubmittedAt);
+        Assert.Equal(InvoiceReconciliationStatus.Pending, claim.InvoiceReconciliationStatus);
         Assert.Empty(claim.Lines);
         Assert.Throws<InvalidOperationException>(() => repository.DeletePayApplication(claim.Id));
     }
@@ -318,6 +322,200 @@ public sealed class SubGuardRepositoryTests
         }));
 
         Assert.Contains("cannot overlap", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ApprovalWorkflowRevalidatesEvidenceAndFreezesApprovedRecords()
+    {
+        using var database = new TemporaryDatabase();
+        using var repository = database.OpenRepository();
+        var (subcontractor, _, application) = CreateApprovalClaim(repository);
+        AddRequiredCompliance(repository, subcontractor.Id);
+
+        var submitted = repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.Submit);
+        Assert.True(submitted.Succeeded);
+        Assert.Equal(ClaimStatus.PendingCompliance, submitted.Status);
+        var pendingCompliance = Assert.Single(repository.GetPayApplications());
+        Assert.NotNull(pendingCompliance.SubmittedAt);
+
+        var compliancePassed = repository.ExecuteApprovalTransition(
+            application.Id,
+            ApprovalTransition.CompleteComplianceReview);
+        Assert.True(compliancePassed.Succeeded);
+        Assert.Equal(ClaimStatus.PendingWaiver, compliancePassed.Status);
+
+        var missingWaiver = repository.ExecuteApprovalTransition(
+            application.Id,
+            ApprovalTransition.CompleteWaiverReview);
+        Assert.False(missingWaiver.Succeeded);
+        Assert.Equal(ClaimStatus.PendingWaiver, missingWaiver.Status);
+        Assert.Contains(missingWaiver.Evaluation.Rules, rule =>
+            rule.RuleCode == "R2" && rule.State == ApprovalRuleState.Failed);
+
+        repository.SaveLienWaiver(new LienWaiver
+        {
+            PayApplicationId = application.Id,
+            Type = WaiverType.Conditional,
+            Status = WaiverStatus.Signed,
+            Amount = 500m
+        });
+        var waiverPassed = repository.ExecuteApprovalTransition(
+            application.Id,
+            ApprovalTransition.CompleteWaiverReview);
+        Assert.True(waiverPassed.Succeeded);
+        Assert.Equal(ClaimStatus.PendingApproval, waiverPassed.Status);
+
+        repository.SaveInvoice(new InvoiceRecord
+        {
+            PayApplicationId = application.Id,
+            InvoiceNumber = "INV-1",
+            Lines = [new InvoiceLine { Description = "Labor", Amount = 200m }]
+        });
+        repository.SaveInvoice(new InvoiceRecord
+        {
+            PayApplicationId = application.Id,
+            InvoiceNumber = "INV-2",
+            Lines = [new InvoiceLine { Description = "Materials", Amount = 300m }]
+        });
+
+        var approved = repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.Approve);
+        Assert.True(approved.Succeeded);
+        Assert.Equal(ClaimStatus.Approved, approved.Status);
+        Assert.Equal(50m, approved.Evaluation.RetainageAmount);
+        var persisted = Assert.Single(repository.GetPayApplications());
+        Assert.NotNull(persisted.ApprovedAt);
+        Assert.Equal(InvoiceReconciliationStatus.Matched, persisted.InvoiceReconciliationStatus);
+        Assert.Equal(2, repository.GetInvoices(application.Id).Count);
+        Assert.Equal(
+            ["Approved", "Waiver review passed", "Compliance passed", "Submitted", "Created"],
+            repository.GetAuditEntries()
+                .Where(entry => entry.EntityType == "Pay application")
+                .Select(entry => entry.Action));
+        repository.SaveComplianceRecord(new ComplianceRecord
+        {
+            SubcontractorId = subcontractor.Id,
+            Type = ComplianceType.Insurance,
+            DocumentNumber = "INS-LATER",
+            ExpiryDate = new DateTime(2026, 1, 15)
+        });
+        Assert.All(
+            repository.EvaluateApproval(application.Id).Rules.Where(rule => rule.RuleCode == "R1"),
+            rule => Assert.Equal(ApprovalRuleState.Passed, rule.State));
+        Assert.Throws<InvalidOperationException>(() => repository.DeleteLienWaiver(
+            repository.GetLienWaivers(application.Id)[0].Id));
+        Assert.Throws<InvalidOperationException>(() => repository.DeleteInvoice(
+            repository.GetInvoices(application.Id)[0].Id));
+        Assert.Throws<InvalidOperationException>(() => repository.SaveComplianceRecord(
+            repository.GetComplianceRecords(subcontractor.Id)[0] with { DocumentNumber = "Changed" }));
+        Assert.DoesNotContain(repository.GetAuditEntries(), entry => entry.Action.Contains("blocked", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void FinalApprovalRechecksR3AndR4AndPersistsInvoiceMismatchWithoutChangingStatus()
+    {
+        using var database = new TemporaryDatabase();
+        using var repository = database.OpenRepository();
+        var (subcontractor, scheduleLine, application) = CreateApprovalClaim(repository);
+        AddRequiredCompliance(repository, subcontractor.Id);
+        repository.SaveLienWaiver(new LienWaiver
+        {
+            PayApplicationId = application.Id,
+            Type = WaiverType.Conditional,
+            Status = WaiverStatus.Signed,
+            Amount = 500m
+        });
+        repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.Submit);
+        repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.CompleteComplianceReview);
+        repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.CompleteWaiverReview);
+
+        repository.SaveInvoice(new InvoiceRecord
+        {
+            PayApplicationId = application.Id,
+            InvoiceNumber = "INV-MISMATCH",
+            Lines = [new InvoiceLine { Description = "Work", Amount = 499.98m }]
+        });
+        var mismatch = repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.Approve);
+        Assert.False(mismatch.Succeeded);
+        Assert.Equal(ClaimStatus.PendingApproval, mismatch.Status);
+        Assert.Contains(mismatch.Evaluation.Rules, rule =>
+            rule.RuleCode == "R5" && rule.State == ApprovalRuleState.Failed);
+        Assert.Equal(InvoiceReconciliationStatus.Mismatch, Assert.Single(repository.GetPayApplications()).InvoiceReconciliationStatus);
+
+        repository.DeleteInvoice(repository.GetInvoices(application.Id)[0].Id);
+        repository.SaveScheduleOfValues(subcontractor.Id,
+        [
+            scheduleLine with { ScheduledValue = 400m }
+        ]);
+        var r3Failure = repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.Approve);
+        Assert.False(r3Failure.Succeeded);
+        Assert.Contains(r3Failure.Evaluation.Rules, rule =>
+            rule.RuleCode == "R3" && rule.State == ApprovalRuleState.Failed);
+
+        repository.SaveScheduleOfValues(subcontractor.Id,
+        [
+            scheduleLine with { ScheduledValue = 1000m }
+        ]);
+        repository.SaveSubcontractor(subcontractor with { OriginalContractValue = 400m });
+        var r4Failure = repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.Approve);
+        Assert.False(r4Failure.Succeeded);
+        Assert.Equal(ClaimStatus.PendingApproval, r4Failure.Status);
+        Assert.Contains(r4Failure.Evaluation.Rules, rule =>
+            rule.RuleCode == "R4" && rule.State == ApprovalRuleState.Failed);
+
+        repository.SaveSubcontractor(subcontractor with { OriginalContractValue = 1000m });
+        var noInvoiceApproval = repository.ExecuteApprovalTransition(application.Id, ApprovalTransition.Approve);
+        Assert.True(noInvoiceApproval.Succeeded);
+        Assert.Equal(
+            InvoiceReconciliationStatus.NotApplicable,
+            Assert.Single(repository.GetPayApplications()).InvoiceReconciliationStatus);
+    }
+
+    private static (Subcontractor Subcontractor, ScheduleOfValuesLine Line, PayApplication Application)
+        CreateApprovalClaim(SubGuardRepository repository)
+    {
+        var subcontractor = repository.SaveSubcontractor(new Subcontractor
+        {
+            Name = "Approval Builder",
+            OriginalContractValue = 1000m,
+            RetainagePercent = 10m
+        });
+        var line = Assert.Single(repository.SaveScheduleOfValues(subcontractor.Id,
+        [
+            new ScheduleOfValuesLine
+            {
+                SubcontractorId = subcontractor.Id,
+                LineNumber = 1,
+                Description = "Work",
+                ScheduledValue = 1000m
+            }
+        ]));
+        var application = repository.SavePayApplication(new PayApplication
+        {
+            ApplicationNumber = "APPROVAL-1",
+            SubcontractorId = subcontractor.Id,
+            PeriodStart = new DateTime(2026, 1, 1),
+            PeriodEnd = new DateTime(2026, 1, 31),
+            Lines = [NewClaimLine(line.Id, 500m)]
+        });
+        return (subcontractor, line, application);
+    }
+
+    private static void AddRequiredCompliance(SubGuardRepository repository, int subcontractorId)
+    {
+        repository.SaveComplianceRecord(new ComplianceRecord
+        {
+            SubcontractorId = subcontractorId,
+            Type = ComplianceType.Insurance,
+            DocumentNumber = "INS-1",
+            ExpiryDate = new DateTime(2026, 1, 31)
+        });
+        repository.SaveComplianceRecord(new ComplianceRecord
+        {
+            SubcontractorId = subcontractorId,
+            Type = ComplianceType.License,
+            DocumentNumber = "LIC-1",
+            ExpiryDate = new DateTime(2026, 1, 31)
+        });
     }
 
     private static PayApplicationLine NewClaimLine(int lineId, decimal amount) =>
