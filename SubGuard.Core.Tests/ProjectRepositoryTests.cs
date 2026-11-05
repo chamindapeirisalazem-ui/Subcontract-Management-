@@ -33,6 +33,15 @@ public sealed class ProjectRepositoryTests : IDisposable
     }
 
     [Fact]
+    public void ReportsDatabasePathAndSchemaVersion()
+    {
+        using var repository = new SubGuardRepository(DatabasePath);
+
+        Assert.Equal(Path.GetFullPath(DatabasePath), repository.DatabasePath);
+        Assert.Equal(3, repository.GetSchemaVersion());
+    }
+
+    [Fact]
     public void RejectsDuplicateProjectNumbersAndBlankRequiredFields()
     {
         using var repository = new SubGuardRepository(DatabasePath);

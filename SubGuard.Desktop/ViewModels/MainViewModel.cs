@@ -42,6 +42,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private int _subcontractProjectId;
     private SubcontractRow? _selectedSubcontractRow;
     private string _subcontractComplianceStatus = string.Empty;
+    private bool _isProjectDetailOpen;
 
     public MainViewModel(SubGuardRepository repository, ApprovalViewModel approvalWorkflow)
     {
@@ -72,6 +73,19 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ProjectsView.CollectionChanged += (_, _) => OnPropertyChanged(nameof(ProjectsEmptyMessage));
 
         NewProjectCommand = new RelayCommand(NewProject);
+        OpenProjectDetailCommand = new RelayCommand(() => IsProjectDetailOpen = SelectedProject is not null, () => SelectedProject is not null);
+        CloseProjectDetailCommand = new RelayCommand(() => IsProjectDetailOpen = false);
+        GoToComplianceCommand = new RelayCommand(() => SelectedTabIndex = 3);
+        OpenProjectSubcontractCommand = new RelayCommand(
+            () =>
+            {
+                if (SelectedSubcontractRow is { } row)
+                {
+                    SelectedSubcontractor = row.Subcontractor;
+                    SelectedTabIndex = 1;
+                }
+            },
+            () => SelectedSubcontractRow is not null);
         SaveProjectCommand = new RelayCommand(
             SaveProject,
             () => !string.IsNullOrWhiteSpace(ProjectNumber) && !string.IsNullOrWhiteSpace(ProjectName));
@@ -118,19 +132,64 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public RelayCommand SaveProjectCommand { get; }
     public RelayCommand DeleteProjectCommand { get; }
     public RelayCommand ClearProjectFiltersCommand { get; }
+    public RelayCommand OpenProjectDetailCommand { get; }
+    public RelayCommand CloseProjectDetailCommand { get; }
+    public RelayCommand OpenProjectSubcontractCommand { get; }
+    public RelayCommand GoToComplianceCommand { get; }
 
-    private static readonly string[] PageNames = ["Projects", "Subcontracts", "Pay applications", "Compliance", "Audit history"];
+    private static readonly string[] PageNames = ["Projects", "Subcontracts", "Pay applications", "Compliance", "Documents", "Settings", "Audit history"];
 
-    public string PageName => PageNames[Math.Clamp(SelectedTabIndex, 0, PageNames.Length - 1)];
+    public string PageName => SelectedTabIndex == 0 && IsProjectDetailOpen && SelectedProject is not null
+        ? $"{SelectedProject.ProjectNumber}  {SelectedProject.Name}"
+        : PageNames[Math.Clamp(SelectedTabIndex, 0, PageNames.Length - 1)];
 
     public string ContextLine => SelectedTabIndex switch
     {
-        0 when SelectedProject is not null => $"Projects  ›  {SelectedProject.ProjectNumber} {SelectedProject.Name}",
+        0 when IsProjectDetailOpen && SelectedProject is not null => "Projects  ›  Project detail",
         1 when SelectedSubcontractor is not null => $"Subcontracts  ›  {SelectedSubcontractor.Name}",
         2 when SelectedPayApplication is not null => $"Pay applications  ›  {SelectedPayApplication.ApplicationNumber} ({SelectedPayApplication.SubcontractorName})",
         3 when ApprovalWorkflow.SelectedApplication is not null => $"Compliance  ›  {ApprovalWorkflow.SelectedApplication.ApplicationNumber}",
-        _ => PageName
+        _ => PageNames[Math.Clamp(SelectedTabIndex, 0, PageNames.Length - 1)]
     };
+
+    public bool IsProjectDetailOpen
+    {
+        get => _isProjectDetailOpen;
+        private set
+        {
+            if (SetProperty(ref _isProjectDetailOpen, value))
+            {
+                OnPropertyChanged(nameof(IsProjectListVisible));
+                OnPropertyChanged(nameof(PageName));
+                OnPropertyChanged(nameof(ContextLine));
+            }
+        }
+    }
+
+    public bool IsProjectListVisible => !_isProjectDetailOpen;
+
+    public string ProjectSummaryText => SelectedProject is null
+        ? string.Empty
+        : $"{ProjectSubcontracts.Count} subcontract(s)  |  Contract value incl. approved change orders: " +
+          $"{ProjectSubcontracts.Sum(row => row.Subcontractor.OriginalContractValue + row.Subcontractor.ApprovedChangeOrderTotal):N2}  |  " +
+          $"{ProjectSubcontracts.Count(row => row.ComplianceStatus != "Current")} with compliance attention";
+
+    public string WorkspacePath => _repository.DatabasePath;
+    public string WorkspaceSchemaVersion => $"Schema version {_repository.GetSchemaVersion()}";
+    public string WorkspaceFileStatus => System.IO.File.Exists(_repository.DatabasePath)
+        ? $"Database file present ({new System.IO.FileInfo(_repository.DatabasePath).Length / 1024.0:N1} KB)"
+        : "Database file not found";
+    public string WorkspaceCounts =>
+        $"{Projects.Count} project(s), {Subcontractors.Count} subcontract(s), {PayApplications.Count} pay application(s), {AuditEntries.Count} audit entries";
+    public string CredentialState => "No credentials are stored or used by this application.";
+    public string AiProviderState => "Awaiting selection";
+    public IReadOnlyList<SettingField> AiProviderFields { get; } =
+    [
+        new("Provider", "Awaiting selection"),
+        new("Model", "Awaiting selection"),
+        new("Endpoint", "Awaiting selection"),
+        new("API key", "Not stored")
+    ];
 
     public string ProjectSearchText
     {
@@ -197,6 +256,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 ProjectSubcontracts,
                 value is null ? [] : SubcontractRows.Where(row => row.Subcontractor.ProjectId == value.Id));
             DeleteProjectCommand.NotifyCanExecuteChanged();
+            OpenProjectDetailCommand.NotifyCanExecuteChanged();
+            OnPropertyChanged(nameof(ProjectSummaryText));
+            OnPropertyChanged(nameof(PageName));
             OnPropertyChanged(nameof(ContextLine));
         }
     }
@@ -253,6 +315,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             {
                 SelectedSubcontractor = value?.Subcontractor;
             }
+
+            OpenProjectSubcontractCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -876,6 +940,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         ApprovalWorkflow.InvalidatePreview();
         var selectedProjectId = SelectedProject?.Id;
+        var detailWasOpen = IsProjectDetailOpen;
         SelectedSubcontractor = null;
         SelectedProject = null;
         SelectedPayApplication = null;
@@ -886,6 +951,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ReplaceItems(AuditEntries, _repository.GetAuditEntries());
         LoadProjects();
         SelectedProject = Projects.FirstOrDefault(project => project.Id == selectedProjectId);
+        IsProjectDetailOpen = detailWasOpen && SelectedProject is not null;
+        OnPropertyChanged(nameof(WorkspaceFileStatus));
+        OnPropertyChanged(nameof(WorkspaceCounts));
+        OnPropertyChanged(nameof(ProjectSummaryText));
         UpdateClaimValidation();
     }
 

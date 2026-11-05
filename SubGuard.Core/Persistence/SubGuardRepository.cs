@@ -30,7 +30,17 @@ public sealed partial class SubGuardRepository : IDisposable
 
         _connection = new SqliteConnection(connectionString);
         _connection.Open();
+        DatabasePath = databasePath;
         InitializeDatabase();
+    }
+
+    public string DatabasePath { get; }
+
+    public int GetSchemaVersion()
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = "PRAGMA user_version;";
+        return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public IReadOnlyList<Subcontractor> GetSubcontractors()

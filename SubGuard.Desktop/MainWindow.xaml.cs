@@ -27,7 +27,7 @@ public partial class MainWindow : Window
         Loaded += async (_, _) => await _viewModel.ApprovalWorkflow.InitializeAsync();
         PreviewKeyDown += (_, e) =>
         {
-            if (Keyboard.Modifiers == ModifierKeys.Control && e.Key >= Key.D1 && e.Key <= Key.D5)
+            if (Keyboard.Modifiers == ModifierKeys.Control && e.Key >= Key.D1 && e.Key <= Key.D7)
             {
                 _viewModel.SelectedTabIndex = e.Key - Key.D1;
                 e.Handled = true;

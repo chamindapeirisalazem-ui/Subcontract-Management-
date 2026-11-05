@@ -6,6 +6,8 @@ public sealed record ValidationRow(string Rule, string State, string Message);
 
 public sealed record ProjectChoice(int Id, string Label);
 
+public sealed record SettingField(string Label, string Value);
+
 public sealed record SubcontractRow(Subcontractor Subcontractor, string ProjectLabel, string ComplianceStatus)
 {
     public string Name => Subcontractor.Name;
