@@ -17,6 +17,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private string _phone = string.Empty;
     private string _originalContractValueText = "0";
     private string _approvedChangeOrderTotalText = "0";
+    private string _retainagePercentText = "0";
     private Subcontractor? _selectedSubcontractor;
     private string _applicationNumber = string.Empty;
     private Subcontractor? _selectedApplicationSubcontractor;
@@ -27,10 +28,13 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     private PayApplication? _selectedPayApplication;
     private Subcontractor? _selectedSovSubcontractor;
     private ScheduleLineViewModel? _selectedScheduleLine;
+    private int _selectedTabIndex;
 
-    public MainViewModel(SubGuardRepository repository)
+    public MainViewModel(SubGuardRepository repository, ApprovalViewModel approvalWorkflow)
     {
         _repository = repository;
+        ApprovalWorkflow = approvalWorkflow;
+        ApprovalWorkflow.NavigateToMainTabRequested += NavigateToMainTab;
         Subcontractors = [];
         PayApplications = [];
         AuditEntries = [];
@@ -58,6 +62,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public ObservableCollection<AuditEntry> AuditEntries { get; }
     public ObservableCollection<ScheduleLineViewModel> ScheduleLines { get; }
     public ObservableCollection<ClaimEntryLineViewModel> ClaimLines { get; }
+    public ApprovalViewModel ApprovalWorkflow { get; }
+    public int SelectedTabIndex
+    {
+        get => _selectedTabIndex;
+        set => SetProperty(ref _selectedTabIndex, value);
+    }
 
     public string StatusMessage
     {
@@ -107,6 +117,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         set => SetProperty(ref _approvedChangeOrderTotalText, value);
     }
 
+    public string RetainagePercentText
+    {
+        get => _retainagePercentText;
+        set => SetProperty(ref _retainagePercentText, value);
+    }
+
     public Subcontractor? SelectedSubcontractor
     {
         get => _selectedSubcontractor;
@@ -123,6 +139,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             Phone = value?.Phone ?? string.Empty;
             OriginalContractValueText = value?.OriginalContractValue.ToString(CultureInfo.CurrentCulture) ?? "0";
             ApprovedChangeOrderTotalText = value?.ApprovedChangeOrderTotal.ToString(CultureInfo.CurrentCulture) ?? "0";
+            RetainagePercentText = value?.RetainagePercent.ToString(CultureInfo.CurrentCulture) ?? "0";
             DeleteSubcontractorCommand.NotifyCanExecuteChanged();
         }
     }
@@ -250,7 +267,11 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public RelayCommand SaveScheduleCommand { get; }
     public RelayCommand RefreshClaimSnapshotCommand { get; }
 
-    public void Dispose() => _repository.Dispose();
+    public void Dispose()
+    {
+        _repository.Dispose();
+        ApprovalWorkflow.Dispose();
+    }
 
     private void NewSubcontractor()
     {
@@ -261,6 +282,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Phone = string.Empty;
         OriginalContractValueText = "0";
         ApprovedChangeOrderTotalText = "0";
+        RetainagePercentText = "0";
         StatusMessage = "Enter the subcontractor details and save.";
     }
 
@@ -268,10 +290,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     {
         if (!decimal.TryParse(OriginalContractValueText, NumberStyles.Number, CultureInfo.CurrentCulture, out var originalValue) ||
             !decimal.TryParse(ApprovedChangeOrderTotalText, NumberStyles.Number, CultureInfo.CurrentCulture, out var changeOrderTotal) ||
+            !decimal.TryParse(RetainagePercentText, NumberStyles.Number, CultureInfo.CurrentCulture, out var retainagePercent) ||
             originalValue < 0 ||
-            changeOrderTotal < 0)
+            changeOrderTotal < 0 ||
+            retainagePercent is < 0 or > 100)
         {
-            StatusMessage = "Contract value and approved change orders must be non-negative amounts.";
+            StatusMessage = "Contract values and approved change orders must be non-negative; retainage must be from 0 to 100 percent.";
             return;
         }
 
@@ -285,7 +309,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable
                 Email = Email,
                 Phone = Phone,
                 OriginalContractValue = originalValue,
-                ApprovedChangeOrderTotal = changeOrderTotal
+                ApprovedChangeOrderTotal = changeOrderTotal,
+                RetainagePercent = retainagePercent
             });
             RefreshData();
             NewSubcontractor();
@@ -497,9 +522,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable
             errors.Add("Enter an application number.");
         }
 
-        if (SelectedPayApplication?.Status is ClaimStatus.Approved or ClaimStatus.Paid)
+        if (SelectedPayApplication is not null && SelectedPayApplication.Status != ClaimStatus.Draft)
         {
-            errors.Add("Approved or paid claim history is read-only.");
+            errors.Add("Submitted claim history is read-only in this editor.");
         }
 
         if (SelectedApplicationSubcontractor is null)
@@ -623,6 +648,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
 
     private void RefreshData()
     {
+        ApprovalWorkflow.InvalidatePreview();
         SelectedSubcontractor = null;
         SelectedPayApplication = null;
         SelectedApplicationSubcontractor = null;
@@ -632,6 +658,22 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         ReplaceItems(AuditEntries, _repository.GetAuditEntries());
         SelectedSovSubcontractor = Subcontractors.FirstOrDefault();
         UpdateClaimValidation();
+    }
+
+    private void NavigateToMainTab(int tabIndex)
+    {
+        var application = ApprovalWorkflow.SelectedApplication;
+        RefreshData();
+        if (tabIndex == 2 && application is not null)
+        {
+            SelectedPayApplication = PayApplications.FirstOrDefault(item => item.Id == application.Id);
+        }
+        else if (tabIndex == 0 && application is not null)
+        {
+            SelectedSubcontractor = Subcontractors.FirstOrDefault(item => item.Id == application.SubcontractorId);
+        }
+
+        SelectedTabIndex = tabIndex;
     }
 
     private static ScheduleLineViewModel ToViewModel(ScheduleOfValuesLine line) =>

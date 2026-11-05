@@ -5,7 +5,7 @@ using SubGuard.Core.Models;
 
 namespace SubGuard.Core.Persistence;
 
-public sealed class SubGuardRepository : IDisposable
+public sealed partial class SubGuardRepository : IDisposable
 {
     private readonly SqliteConnection _connection;
     private bool _disposed;
@@ -38,7 +38,7 @@ public sealed class SubGuardRepository : IDisposable
         using var command = _connection.CreateCommand();
         command.CommandText = """
             SELECT id, name, contact_name, email, phone, original_contract_value,
-                   approved_change_order_total
+                   approved_change_order_total, retainage_percent
             FROM subcontractors
             ORDER BY name COLLATE NOCASE, id;
             """;
@@ -55,7 +55,8 @@ public sealed class SubGuardRepository : IDisposable
                 Email = reader.GetString(3),
                 Phone = reader.GetString(4),
                 OriginalContractValue = decimal.Parse(reader.GetString(5), CultureInfo.InvariantCulture),
-                ApprovedChangeOrderTotal = decimal.Parse(reader.GetString(6), CultureInfo.InvariantCulture)
+                ApprovedChangeOrderTotal = decimal.Parse(reader.GetString(6), CultureInfo.InvariantCulture),
+                RetainagePercent = decimal.Parse(reader.GetString(7), CultureInfo.InvariantCulture)
             });
         }
 
@@ -67,7 +68,9 @@ public sealed class SubGuardRepository : IDisposable
         using var command = _connection.CreateCommand();
         command.CommandText = """
             SELECT p.id, p.application_number, p.subcontractor_id, s.name,
-                   p.period_start, p.period_end, p.amount, p.notes, p.status
+                   p.period_start, p.period_end, p.amount, p.notes, p.status,
+                   p.submitted_at, p.approved_at, p.retainage_percent_snapshot,
+                   p.invoice_reconciliation_status
             FROM pay_applications p
             INNER JOIN subcontractors s ON s.id = p.subcontractor_id
             ORDER BY p.period_end DESC, p.id DESC;
@@ -88,7 +91,15 @@ public sealed class SubGuardRepository : IDisposable
                     PeriodEnd = DateTime.Parse(reader.GetString(5), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
                     Amount = decimal.Parse(reader.GetString(6), CultureInfo.InvariantCulture),
                     Notes = reader.GetString(7),
-                    Status = Enum.Parse<ClaimStatus>(reader.GetString(8), ignoreCase: true)
+                    Status = Enum.Parse<ClaimStatus>(reader.GetString(8), ignoreCase: true),
+                    SubmittedAt = reader.IsDBNull(9)
+                        ? null
+                        : DateTimeOffset.Parse(reader.GetString(9), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                    ApprovedAt = reader.IsDBNull(10)
+                        ? null
+                        : DateTimeOffset.Parse(reader.GetString(10), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                    RetainagePercent = decimal.Parse(reader.GetString(11), CultureInfo.InvariantCulture),
+                    InvoiceReconciliationStatus = Enum.Parse<InvoiceReconciliationStatus>(reader.GetString(12), ignoreCase: true)
                 });
             }
         }
@@ -159,11 +170,13 @@ public sealed class SubGuardRepository : IDisposable
     {
         ArgumentNullException.ThrowIfNull(subcontractor);
         var name = Required(subcontractor.Name, nameof(subcontractor.Name));
-        if (subcontractor.OriginalContractValue < 0 || subcontractor.ApprovedChangeOrderTotal < 0)
+        if (subcontractor.OriginalContractValue < 0 ||
+            subcontractor.ApprovedChangeOrderTotal < 0 ||
+            subcontractor.RetainagePercent is < 0 or > 100)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(subcontractor),
-                "Contract value and approved change orders must be non-negative.");
+                "Contract values and approved change orders must be non-negative; retainage must be from 0 to 100 percent.");
         }
 
         using var transaction = _connection.BeginTransaction();
@@ -176,8 +189,8 @@ public sealed class SubGuardRepository : IDisposable
             command.Transaction = transaction;
             command.CommandText = """
                 INSERT INTO subcontractors
-                    (name, contact_name, email, phone, original_contract_value, approved_change_order_total)
-                VALUES ($name, $contact, $email, $phone, $originalValue, $changeOrders)
+                    (name, contact_name, email, phone, original_contract_value, approved_change_order_total, retainage_percent)
+                VALUES ($name, $contact, $email, $phone, $originalValue, $changeOrders, $retainage)
                 RETURNING id;
                 """;
             AddSubcontractorParameters(command, subcontractor, name);
@@ -192,7 +205,8 @@ public sealed class SubGuardRepository : IDisposable
                 UPDATE subcontractors
                 SET name = $name, contact_name = $contact, email = $email, phone = $phone,
                     original_contract_value = $originalValue,
-                    approved_change_order_total = $changeOrders
+                    approved_change_order_total = $changeOrders,
+                    retainage_percent = $retainage
                 WHERE id = $id;
                 """;
             AddSubcontractorParameters(command, subcontractor, name);
@@ -392,17 +406,18 @@ public sealed class SubGuardRepository : IDisposable
 
             if (Enum.Parse<ClaimStatus>(status, ignoreCase: true) != ClaimStatus.Draft)
             {
-                throw new InvalidOperationException("Approved or paid claim history is read-only.");
+                throw new InvalidOperationException("Only draft claims can be edited.");
             }
         }
 
         decimal originalValue;
         decimal approvedChangeOrderTotal;
+        decimal retainagePercent;
         using (var subcontractCommand = _connection.CreateCommand())
         {
             subcontractCommand.Transaction = transaction;
             subcontractCommand.CommandText = """
-                SELECT original_contract_value, approved_change_order_total
+                SELECT original_contract_value, approved_change_order_total, retainage_percent
                 FROM subcontractors
                 WHERE id = $id;
                 """;
@@ -415,6 +430,7 @@ public sealed class SubGuardRepository : IDisposable
 
             originalValue = decimal.Parse(reader.GetString(0), CultureInfo.InvariantCulture);
             approvedChangeOrderTotal = decimal.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
+            retainagePercent = decimal.Parse(reader.GetString(2), CultureInfo.InvariantCulture);
         }
 
         ValidateNonOverlappingPeriod(transaction, application);
@@ -460,11 +476,12 @@ public sealed class SubGuardRepository : IDisposable
             command.Transaction = transaction;
             command.CommandText = """
                 INSERT INTO pay_applications
-                    (application_number, subcontractor_id, period_start, period_end, amount, notes, status)
-                VALUES ($number, $subcontractorId, $start, $end, $amount, $notes, $status)
+                    (application_number, subcontractor_id, period_start, period_end, amount, notes, status, retainage_percent_snapshot)
+                VALUES ($number, $subcontractorId, $start, $end, $amount, $notes, $status, $retainage)
                 RETURNING id;
                 """;
             AddPayApplicationParameters(command, application, number, start, end, amount, application.Status);
+            command.Parameters.AddWithValue("$retainage", retainagePercent.ToString(CultureInfo.InvariantCulture));
             id = Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
             action = "Created";
         }
@@ -476,10 +493,12 @@ public sealed class SubGuardRepository : IDisposable
                 UPDATE pay_applications
                 SET application_number = $number, subcontractor_id = $subcontractorId,
                     period_start = $start, period_end = $end, amount = $amount, notes = $notes,
-                    status = $status
+                    status = $status, invoice_reconciliation_status = 'Pending',
+                    retainage_percent_snapshot = $retainage
                 WHERE id = $id;
                 """;
             AddPayApplicationParameters(command, application, number, start, end, amount, application.Status);
+            command.Parameters.AddWithValue("$retainage", retainagePercent.ToString(CultureInfo.InvariantCulture));
             command.Parameters.AddWithValue("$id", application.Id);
             if (command.ExecuteNonQuery() == 0)
             {
@@ -525,6 +544,7 @@ public sealed class SubGuardRepository : IDisposable
             Id = id,
             ApplicationNumber = number,
             Amount = total,
+            RetainagePercent = retainagePercent,
             Lines = checkedLines
         };
     }
@@ -548,7 +568,7 @@ public sealed class SubGuardRepository : IDisposable
             number = reader.GetString(0);
             if (Enum.Parse<ClaimStatus>(reader.GetString(1), ignoreCase: true) != ClaimStatus.Draft)
             {
-                throw new InvalidOperationException("Approved or paid claim history cannot be deleted.");
+                throw new InvalidOperationException("Only draft claims can be deleted.");
             }
         }
 
@@ -720,7 +740,8 @@ public sealed class SubGuardRepository : IDisposable
                 email TEXT NOT NULL DEFAULT '',
                 phone TEXT NOT NULL DEFAULT '',
                 original_contract_value TEXT NOT NULL DEFAULT '0',
-                approved_change_order_total TEXT NOT NULL DEFAULT '0'
+                approved_change_order_total TEXT NOT NULL DEFAULT '0',
+                retainage_percent TEXT NOT NULL DEFAULT '0'
             );
 
             CREATE TABLE IF NOT EXISTS pay_applications (
@@ -731,7 +752,11 @@ public sealed class SubGuardRepository : IDisposable
                 period_end TEXT NOT NULL,
                 amount TEXT NOT NULL,
                 notes TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'Draft'
+                status TEXT NOT NULL DEFAULT 'Draft',
+                submitted_at TEXT NULL,
+                approved_at TEXT NULL,
+                invoice_reconciliation_status TEXT NOT NULL DEFAULT 'Pending',
+                retainage_percent_snapshot TEXT NOT NULL DEFAULT '0'
             );
 
             CREATE TABLE IF NOT EXISTS schedule_of_values_lines (
@@ -762,14 +787,58 @@ public sealed class SubGuardRepository : IDisposable
                 action TEXT NOT NULL,
                 summary TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS compliance_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subcontractor_id INTEGER NOT NULL REFERENCES subcontractors(id) ON DELETE CASCADE,
+                type TEXT NOT NULL,
+                document_number TEXT NOT NULL,
+                expiry_date TEXT NULL,
+                file_path TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS lien_waivers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pay_application_id INTEGER NOT NULL REFERENCES pay_applications(id) ON DELETE CASCADE,
+                type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                amount TEXT NOT NULL,
+                signed_at TEXT NULL,
+                file_path TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS invoices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pay_application_id INTEGER NOT NULL REFERENCES pay_applications(id) ON DELETE CASCADE,
+                invoice_number TEXT NOT NULL,
+                provenance TEXT NOT NULL DEFAULT 'Manual'
+            );
+
+            CREATE TABLE IF NOT EXISTS invoice_lines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+                description TEXT NOT NULL,
+                amount TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS pay_application_compliance_records (
+                pay_application_id INTEGER NOT NULL REFERENCES pay_applications(id) ON DELETE CASCADE,
+                compliance_record_id INTEGER NOT NULL REFERENCES compliance_records(id) ON DELETE RESTRICT,
+                PRIMARY KEY (pay_application_id, compliance_record_id)
+            );
             """;
         command.ExecuteNonQuery();
 
         EnsureColumn("subcontractors", "original_contract_value", "TEXT NOT NULL DEFAULT '0'");
         EnsureColumn("subcontractors", "approved_change_order_total", "TEXT NOT NULL DEFAULT '0'");
+        EnsureColumn("subcontractors", "retainage_percent", "TEXT NOT NULL DEFAULT '0'");
         EnsureColumn("pay_applications", "status", "TEXT NOT NULL DEFAULT 'Approved'");
+        EnsureColumn("pay_applications", "submitted_at", "TEXT NULL");
+        EnsureColumn("pay_applications", "approved_at", "TEXT NULL");
+        EnsureColumn("pay_applications", "invoice_reconciliation_status", "TEXT NOT NULL DEFAULT 'Pending'");
+        EnsureColumn("pay_applications", "retainage_percent_snapshot", "TEXT NOT NULL DEFAULT '0'");
         using var versionCommand = _connection.CreateCommand();
-        versionCommand.CommandText = "PRAGMA user_version = 1;";
+        versionCommand.CommandText = "PRAGMA user_version = 2;";
         versionCommand.ExecuteNonQuery();
     }
 
@@ -808,6 +877,7 @@ public sealed class SubGuardRepository : IDisposable
         command.Parameters.AddWithValue("$phone", subcontractor.Phone.Trim());
         command.Parameters.AddWithValue("$originalValue", subcontractor.OriginalContractValue.ToString(CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$changeOrders", subcontractor.ApprovedChangeOrderTotal.ToString(CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$retainage", subcontractor.RetainagePercent.ToString(CultureInfo.InvariantCulture));
     }
 
     private static void AddPayApplicationParameters(

@@ -16,9 +16,12 @@ public partial class MainWindow : Window
         var dataDirectory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "SubGuard");
-        var repository = new SubGuardRepository(Path.Combine(dataDirectory, "subguard.db"));
-        _viewModel = new MainViewModel(repository);
+        var databasePath = Path.Combine(dataDirectory, "subguard.db");
+        var repository = new SubGuardRepository(databasePath);
+        var approvalRepository = new SubGuardRepository(databasePath);
+        _viewModel = new MainViewModel(repository, new ApprovalViewModel(approvalRepository));
         DataContext = _viewModel;
+        Loaded += async (_, _) => await _viewModel.ApprovalWorkflow.InitializeAsync();
         Closed += (_, _) => _viewModel.Dispose();
     }
 }
