@@ -110,6 +110,10 @@
                                 <TextBox Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
                                 <TextBlock Text="Phone" Foreground="{StaticResource MutedBrush}" />
                                 <TextBox Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Original subcontract value" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox Text="{Binding OriginalContractValueText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Approved change orders" Foreground="{StaticResource MutedBrush}" />
+                                <TextBox Text="{Binding ApprovedChangeOrderTotalText, UpdateSourceTrigger=PropertyChanged}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <Button Content="New" Command="{Binding NewSubcontractorCommand}" />
                                     <Button Content="Save" Command="{Binding SaveSubcontractorCommand}" Style="{StaticResource PrimaryButton}" />
@@ -121,12 +125,39 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="Schedule of values" Padding="16,9">
+                <DockPanel Margin="16">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
+                        <TextBlock Text="Subcontractor" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />
+                        <ComboBox Width="260"
+                                  ItemsSource="{Binding Subcontractors}"
+                                  DisplayMemberPath="Name"
+                                  SelectedItem="{Binding SelectedSovSubcontractor, Mode=TwoWay}" />
+                        <Button Content="Add line" Command="{Binding AddScheduleLineCommand}" />
+                        <Button Content="Remove line" Command="{Binding RemoveScheduleLineCommand}" />
+                        <Button Content="Save schedule" Command="{Binding SaveScheduleCommand}" Style="{StaticResource PrimaryButton}" />
+                    </StackPanel>
+                    <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
+                        <DataGrid ItemsSource="{Binding ScheduleLines}"
+                                  SelectedItem="{Binding SelectedScheduleLine, Mode=TwoWay}"
+                                  IsReadOnly="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Line" Binding="{Binding LineNumber, UpdateSourceTrigger=PropertyChanged}" Width="75" />
+                                <DataGridTextColumn Header="Description" Binding="{Binding Description, UpdateSourceTrigger=PropertyChanged}" Width="2*" />
+                                <DataGridTextColumn Header="Scheduled value" Binding="{Binding ScheduledValue, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
+                                <DataGridTextColumn Header="Previously billed" Binding="{Binding PreviouslyBilledSnapshot, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Border>
+                </DockPanel>
+            </TabItem>
+
             <TabItem Header="Pay applications" Padding="16,9">
                 <Grid Margin="16">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.25*" />
+                        <ColumnDefinition Width="0.9*" />
                         <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="0.85*" />
+                        <ColumnDefinition Width="1.1*" />
                     </Grid.ColumnDefinitions>
                     <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
                         <DataGrid ItemsSource="{Binding PayApplications}" SelectedItem="{Binding SelectedPayApplication, Mode=TwoWay}">
@@ -135,6 +166,7 @@
                                 <DataGridTextColumn Header="Subcontractor" Binding="{Binding SubcontractorName}" Width="1.5*" />
                                 <DataGridTextColumn Header="Period end" Binding="{Binding PeriodEnd, StringFormat={}{0:yyyy-MM-dd}}" Width="*" />
                                 <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="*" />
+                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*" />
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>
@@ -152,8 +184,25 @@
                                 <DatePicker SelectedDate="{Binding PeriodStart, Mode=TwoWay}" />
                                 <TextBlock Text="Period end" Foreground="{StaticResource MutedBrush}" />
                                 <DatePicker SelectedDate="{Binding PeriodEnd, Mode=TwoWay}" />
-                                <TextBlock Text="Amount" Foreground="{StaticResource MutedBrush}" />
-                                <TextBox Text="{Binding AmountText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Claim lines" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,3" />
+                                <DataGrid ItemsSource="{Binding ClaimLines}" Height="210" MinHeight="130" IsReadOnly="False" CanUserAddRows="False" Margin="0,0,0,8">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Line" Binding="{Binding LineNumber}" IsReadOnly="True" Width="50" />
+                                        <DataGridTextColumn Header="Description" Binding="{Binding Description}" IsReadOnly="True" Width="1.5*" />
+                                        <DataGridTextColumn Header="Scheduled" Binding="{Binding ScheduledValue, StringFormat={}{0:N2}}" IsReadOnly="True" Width="*" />
+                                        <DataGridTextColumn Header="Previously billed" Binding="{Binding PreviouslyBilled, StringFormat={}{0:N2}}" IsReadOnly="True" Width="*" />
+                                        <DataGridTextColumn Header="Remaining" Binding="{Binding Remaining, StringFormat={}{0:N2}}" IsReadOnly="True" Width="*" />
+                                        <DataGridTextColumn Header="This claim" Binding="{Binding Amount, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                    <TextBlock Text="Claim total: " FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+                                    <TextBlock Text="{Binding ClaimTotal, StringFormat={}{0:N2}}" Foreground="{StaticResource InkBrush}" />
+                                    <Button Content="Refresh snapshot" Command="{Binding RefreshClaimSnapshotCommand}" Margin="16,0,0,0" />
+                                </StackPanel>
+                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="9" Margin="0,0,0,8">
+                                    <TextBlock Text="{Binding ValidationSummary}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+                                </Border>
                                 <TextBlock Text="Notes" Foreground="{StaticResource MutedBrush}" />
                                 <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" MinHeight="62" TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
