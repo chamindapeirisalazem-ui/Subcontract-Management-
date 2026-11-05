@@ -9,7 +9,9 @@
         Background="{DynamicResource CanvasBrush}"
         FontFamily="Segoe UI"
         FontSize="14">
-    <Window.Resources />
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </Window.Resources>
 
     <Grid>
         <Grid.ColumnDefinitions>
@@ -43,7 +45,9 @@
                     <ListBoxItem Content="Subcontracts" ToolTip="Ctrl+2" AutomationProperties.AccessKey="Ctrl+2" />
                     <ListBoxItem Content="Pay applications" ToolTip="Ctrl+3" AutomationProperties.AccessKey="Ctrl+3" />
                     <ListBoxItem Content="Compliance" ToolTip="Ctrl+4" AutomationProperties.AccessKey="Ctrl+4" />
-                    <ListBoxItem Content="Audit history" ToolTip="Ctrl+5" AutomationProperties.AccessKey="Ctrl+5" />
+                    <ListBoxItem Content="Documents" ToolTip="Ctrl+5" AutomationProperties.AccessKey="Ctrl+5" />
+                    <ListBoxItem Content="Settings" ToolTip="Ctrl+6" AutomationProperties.AccessKey="Ctrl+6" />
+                    <ListBoxItem Content="Audit history" ToolTip="Ctrl+7" AutomationProperties.AccessKey="Ctrl+7" />
                 </ListBox>
             </DockPanel>
         </Border>
@@ -61,7 +65,8 @@
                 <StaticResource ResourceKey="HiddenTabItem" />
             </TabControl.ItemContainerStyle>
             <TabItem Header="Projects">
-                <Grid Margin="0,0,0,8">
+                <Grid>
+                <Grid Margin="0,0,0,8" Visibility="{Binding IsProjectListVisible, Converter={StaticResource BoolToVisibility}}">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1.4*" />
                         <ColumnDefinition Width="16" />
@@ -93,6 +98,10 @@
                             <Grid>
                                 <DataGrid ItemsSource="{Binding ProjectsView}" SelectedItem="{Binding SelectedProject, Mode=TwoWay}"
                                           CanUserSortColumns="True" AutomationProperties.Name="Projects">
+                                    <DataGrid.InputBindings>
+                                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding OpenProjectDetailCommand}" />
+                                        <KeyBinding Key="Return" Command="{Binding OpenProjectDetailCommand}" />
+                                    </DataGrid.InputBindings>
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Project no." Binding="{Binding ProjectNumber}" SortMemberPath="ProjectNumber" Width="*" />
                                         <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" Width="2*" />
@@ -127,6 +136,7 @@
                                 <ComboBox ItemsSource="{Binding ProjectStatuses}" SelectedItem="{Binding ProjectStatus, Mode=TwoWay}" />
                                 <StackPanel Orientation="Horizontal" Margin="0,4,0,16">
                                     <Button Content="New project" Command="{Binding NewProjectCommand}" />
+                                    <Button Content="Open" Command="{Binding OpenProjectDetailCommand}" AutomationProperties.Name="Open project detail" />
                                     <Button Content="Save" Command="{Binding SaveProjectCommand}" Style="{StaticResource PrimaryButton}" />
                                     <Button Content="Delete" Command="{Binding DeleteProjectCommand}" Style="{StaticResource DangerButton}" />
                                 </StackPanel>
@@ -151,6 +161,61 @@
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
+                </Grid>
+
+                <Grid Visibility="{Binding IsProjectDetailOpen, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,8">
+                    <Border Style="{StaticResource Card}">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,16">
+                                <Button Content="‹ Back to projects" Command="{Binding CloseProjectDetailCommand}" Margin="0,0,16,0"
+                                        AutomationProperties.Name="Back to projects" />
+                                <ContentControl Content="{Binding SelectedProject.Status}" Style="{StaticResource StatusChip}" />
+                            </StackPanel>
+                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,16">
+                                <TextBlock Text="Owner" Style="{StaticResource FieldLabel}" />
+                                <TextBlock Text="{Binding SelectedProject.OwnerName}" Margin="0,0,0,12" />
+                                <TextBlock Text="Summary" Style="{StaticResource FieldLabel}" />
+                                <TextBlock Text="{Binding ProjectSummaryText}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,16,0,0">
+                                <Button Content="Open subcontract" Command="{Binding OpenProjectSubcontractCommand}" Style="{StaticResource PrimaryButton}" />
+                            </StackPanel>
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="Subcontracts" Style="{StaticResource SectionTitle}" />
+                                <Grid>
+                                    <DataGrid ItemsSource="{Binding ProjectSubcontracts}" SelectedItem="{Binding SelectedSubcontractRow, Mode=TwoWay}"
+                                              AutomationProperties.Name="Project subcontracts">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Subcontractor" Binding="{Binding Name}" Width="2*" />
+                                            <DataGridTextColumn Header="Contract value" Binding="{Binding ContractValue, StringFormat={}{0:N2}}" Width="*" />
+                                            <DataGridTemplateColumn Header="Compliance" Width="160" SortMemberPath="ComplianceStatus">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <ContentControl Content="{Binding ComplianceStatus}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                    <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Text="No subcontracts are linked to this project yet. Assign one on the Subcontracts page."
+                                               IsHitTestVisible="False">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource MutedText}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ProjectSubcontracts.Count}" Value="0">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                            </DockPanel>
+                        </DockPanel>
+                    </Border>
+                </Grid>
                 </Grid>
             </TabItem>
             <TabItem Header="Subcontracts">
@@ -377,9 +442,13 @@
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <DockPanel Grid.Row="0" Margin="0,0,0,12">
-                        <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" Margin="0" />
-                        <StackPanel Orientation="Horizontal">
+                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshCommand}" VerticalAlignment="Top" Margin="8,0,0,0" />
+                        <WrapPanel Grid.Column="0" Orientation="Horizontal">
                             <TextBlock Text="Pay application" VerticalAlignment="Center" Style="{StaticResource MutedText}" Margin="0,0,8,0" />
                             <ComboBox Width="260" Margin="0,0,12,0"
                                       ItemsSource="{Binding Applications}"
@@ -395,8 +464,8 @@
                             <Button Content="Pass R1" Command="{Binding CompleteComplianceReviewCommand}" />
                             <Button Content="Pass R1 + R2" Command="{Binding CompleteWaiverReviewCommand}" />
                             <Button Content="Approve (R1–R5)" Command="{Binding ApproveCommand}" Style="{StaticResource PrimaryButton}" />
-                        </StackPanel>
-                    </DockPanel>
+                        </WrapPanel>
+                    </Grid>
 
                     <DataGrid Grid.Row="1" ItemsSource="{Binding Rules}" Height="178" Margin="0,0,0,10">
                         <DataGrid.Columns>
@@ -426,7 +495,7 @@
                     <TabControl Grid.Row="2"
                                 SelectedIndex="{Binding SelectedEvidenceTabIndex, Mode=TwoWay}">
                         <TabItem Header="Compliance evidence">
-                            <Grid Margin="12">
+                            <Grid Margin="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="1.2*" />
                                     <ColumnDefinition Width="16" />
@@ -449,14 +518,14 @@
                                 </DataGrid>
                                 <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
                                     <StackPanel>
-                                        <TextBlock Text="Evidence details" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                        <TextBlock Text="Evidence details" Style="{StaticResource SectionTitle}" />
                                         <TextBlock Text="Type" Foreground="{StaticResource MutedBrush}" />
                                         <ComboBox ItemsSource="{Binding ComplianceTypes}" SelectedItem="{Binding ComplianceType}" />
-                                        <TextBlock Text="Document number" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBlock Text="Document number" Style="{StaticResource FieldLabel}" />
                                         <TextBox Text="{Binding DocumentNumber, UpdateSourceTrigger=PropertyChanged}" />
-                                        <TextBlock Text="Expiry date" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBlock Text="Expiry date" Style="{StaticResource FieldLabel}" />
                                         <DatePicker SelectedDate="{Binding ExpiryDate, Mode=TwoWay}" />
-                                        <TextBlock Text="Linked file path" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBlock Text="Linked file path" Style="{StaticResource FieldLabel}" />
                                         <TextBox Text="{Binding ComplianceFilePath, UpdateSourceTrigger=PropertyChanged}" />
                                         <StackPanel Orientation="Horizontal">
                                             <Button Content="New" Command="{Binding NewComplianceCommand}" />
@@ -468,7 +537,7 @@
                             </Grid>
                         </TabItem>
                         <TabItem Header="Lien waivers">
-                            <Grid Margin="12">
+                            <Grid Margin="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="1.2*" />
                                     <ColumnDefinition Width="16" />
@@ -485,16 +554,16 @@
                                 </DataGrid>
                                 <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
                                     <StackPanel>
-                                        <TextBlock Text="Waiver details" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                        <TextBlock Text="Waiver details" Style="{StaticResource SectionTitle}" />
                                         <TextBlock Text="Type" Foreground="{StaticResource MutedBrush}" />
                                         <ComboBox ItemsSource="{Binding WaiverTypes}" SelectedItem="{Binding WaiverType}" />
                                         <TextBlock Text="Status" Foreground="{StaticResource MutedBrush}" />
                                         <ComboBox ItemsSource="{Binding WaiverStatuses}" SelectedItem="{Binding WaiverStatus}" />
-                                        <TextBlock Text="Waiver amount" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBlock Text="Waiver amount" Style="{StaticResource FieldLabel}" />
                                         <TextBox Text="{Binding WaiverAmountText, UpdateSourceTrigger=PropertyChanged}" />
-                                        <TextBlock Text="Signed date (metadata)" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBlock Text="Signed date (metadata)" Style="{StaticResource FieldLabel}" />
                                         <DatePicker SelectedDate="{Binding WaiverSignedAt, Mode=TwoWay}" />
-                                        <TextBlock Text="Linked file path (metadata)" Foreground="{StaticResource MutedBrush}" />
+                                        <TextBlock Text="Linked file path (metadata)" Style="{StaticResource FieldLabel}" />
                                         <TextBox Text="{Binding WaiverFilePath, UpdateSourceTrigger=PropertyChanged}" />
                                         <StackPanel Orientation="Horizontal">
                                             <Button Content="New" Command="{Binding NewWaiverCommand}" />
@@ -506,7 +575,7 @@
                             </Grid>
                         </TabItem>
                         <TabItem Header="Invoices">
-                            <Grid Margin="12">
+                            <Grid Margin="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="1.1*" />
                                     <ColumnDefinition Width="16" />
@@ -527,7 +596,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <StackPanel Grid.Row="0">
-                                        <TextBlock Text="Invoice details" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                        <TextBlock Text="Invoice details" Style="{StaticResource SectionTitle}" />
                                         <DockPanel>
                                             <TextBox Width="190" Text="{Binding InvoiceNumber, UpdateSourceTrigger=PropertyChanged}" />
                                             <TextBox Text="{Binding InvoiceProvenance, UpdateSourceTrigger=PropertyChanged}" ToolTip="Provenance (manual for this milestone)" />
@@ -564,8 +633,56 @@
                             </Grid>
                         </TabItem>
                     </TabControl>
-                    <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Foreground="{StaticResource MutedBrush}" Margin="2,10,0,0" />
+                    <TextBlock Grid.Row="3" Text="{Binding StatusMessage}" Foreground="{DynamicResource MutedBrush}" Margin="2,12,0,0" />
                 </Grid>
+            </TabItem>
+
+            <TabItem Header="Documents">
+                <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                    <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+                        <TextBlock Text="Documents" Style="{StaticResource SectionTitle}" />
+                        <ContentControl Content="Not available" Style="{StaticResource StatusChip}" HorizontalAlignment="Left" Margin="0,0,0,12" />
+                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
+                                   Text="AI document intake is not yet available. SubGuard does not read, upload or classify documents in this version." />
+                        <TextBlock TextWrapping="Wrap" Style="{StaticResource MutedText}" Margin="0,0,0,16"
+                                   Text="Until intake is available, enter compliance evidence, lien waivers and invoices manually on the Compliance page." />
+                        <Button Content="Go to Compliance" HorizontalAlignment="Left" Style="{StaticResource PrimaryButton}"
+                                Command="{Binding GoToComplianceCommand}" />
+                    </StackPanel>
+                </Border>
+            </TabItem>
+
+            <TabItem Header="Settings">
+                <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+                            <TextBlock Text="Workspace" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Text="Database file" Style="{StaticResource FieldLabel}" />
+                            <TextBox Text="{Binding WorkspacePath, Mode=OneWay}" IsReadOnly="True" Margin="0,0,0,12" AutomationProperties.Name="Database file path" />
+                            <TextBlock Text="Status" Style="{StaticResource FieldLabel}" />
+                            <TextBlock Text="{Binding WorkspaceFileStatus}" Margin="0,0,0,4" />
+                            <TextBlock Text="{Binding WorkspaceSchemaVersion}" Margin="0,0,0,4" />
+                            <TextBlock Text="{Binding WorkspaceCounts}" Margin="0,0,0,24" TextWrapping="Wrap" />
+
+                            <TextBlock Text="Credentials" Style="{StaticResource SectionTitle}" />
+                            <TextBlock Text="{Binding CredentialState}" Margin="0,0,0,24" TextWrapping="Wrap" />
+
+                            <TextBlock Text="AI provider" Style="{StaticResource SectionTitle}" />
+                            <ItemsControl ItemsSource="{Binding AiProviderFields}" Margin="0,0,0,8">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,8">
+                                            <TextBlock Text="{Binding Label}" Style="{StaticResource FieldLabel}" />
+                                            <TextBlock Text="{Binding Value}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap"
+                                       Text="No AI backend exists yet, so these fields are read-only and nothing is stored." />
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
             </TabItem>
 
             <TabItem Header="Audit history">
