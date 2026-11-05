@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
+using SubGuard.Core.Domain;
 using SubGuard.Core.Models;
 
 namespace SubGuard.Core.Persistence;
@@ -36,7 +37,8 @@ public sealed class SubGuardRepository : IDisposable
     {
         using var command = _connection.CreateCommand();
         command.CommandText = """
-            SELECT id, name, contact_name, email, phone
+            SELECT id, name, contact_name, email, phone, original_contract_value,
+                   approved_change_order_total
             FROM subcontractors
             ORDER BY name COLLATE NOCASE, id;
             """;
@@ -51,7 +53,9 @@ public sealed class SubGuardRepository : IDisposable
                 Name = reader.GetString(1),
                 ContactName = reader.GetString(2),
                 Email = reader.GetString(3),
-                Phone = reader.GetString(4)
+                Phone = reader.GetString(4),
+                OriginalContractValue = decimal.Parse(reader.GetString(5), CultureInfo.InvariantCulture),
+                ApprovedChangeOrderTotal = decimal.Parse(reader.GetString(6), CultureInfo.InvariantCulture)
             });
         }
 
@@ -63,30 +67,65 @@ public sealed class SubGuardRepository : IDisposable
         using var command = _connection.CreateCommand();
         command.CommandText = """
             SELECT p.id, p.application_number, p.subcontractor_id, s.name,
-                   p.period_start, p.period_end, p.amount, p.notes
+                   p.period_start, p.period_end, p.amount, p.notes, p.status
             FROM pay_applications p
             INNER JOIN subcontractors s ON s.id = p.subcontractor_id
             ORDER BY p.period_end DESC, p.id DESC;
             """;
 
-        using var reader = command.ExecuteReader();
         var items = new List<PayApplication>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                items.Add(new PayApplication
+                {
+                    Id = reader.GetInt32(0),
+                    ApplicationNumber = reader.GetString(1),
+                    SubcontractorId = reader.GetInt32(2),
+                    SubcontractorName = reader.GetString(3),
+                    PeriodStart = DateTime.Parse(reader.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                    PeriodEnd = DateTime.Parse(reader.GetString(5), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                    Amount = decimal.Parse(reader.GetString(6), CultureInfo.InvariantCulture),
+                    Notes = reader.GetString(7),
+                    Status = Enum.Parse<ClaimStatus>(reader.GetString(8), ignoreCase: true)
+                });
+            }
+        }
+
+        return items
+            .Select(application => application with { Lines = GetPayApplicationLines(application.Id) })
+            .ToArray();
+    }
+
+    public IReadOnlyList<ScheduleOfValuesLine> GetScheduleOfValues(int subcontractorId)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, subcontractor_id, line_number, description, scheduled_value,
+                   previously_billed_snapshot
+            FROM schedule_of_values_lines
+            WHERE subcontractor_id = $subcontractorId
+            ORDER BY line_number, id;
+            """;
+        command.Parameters.AddWithValue("$subcontractorId", subcontractorId);
+
+        using var reader = command.ExecuteReader();
+        var lines = new List<ScheduleOfValuesLine>();
         while (reader.Read())
         {
-            items.Add(new PayApplication
+            lines.Add(new ScheduleOfValuesLine
             {
                 Id = reader.GetInt32(0),
-                ApplicationNumber = reader.GetString(1),
-                SubcontractorId = reader.GetInt32(2),
-                SubcontractorName = reader.GetString(3),
-                PeriodStart = DateTime.Parse(reader.GetString(4), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-                PeriodEnd = DateTime.Parse(reader.GetString(5), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
-                Amount = decimal.Parse(reader.GetString(6), CultureInfo.InvariantCulture),
-                Notes = reader.GetString(7)
+                SubcontractorId = reader.GetInt32(1),
+                LineNumber = reader.GetInt32(2),
+                Description = reader.GetString(3),
+                ScheduledValue = decimal.Parse(reader.GetString(4), CultureInfo.InvariantCulture),
+                PreviouslyBilledSnapshot = decimal.Parse(reader.GetString(5), CultureInfo.InvariantCulture)
             });
         }
 
-        return items;
+        return lines;
     }
 
     public IReadOnlyList<AuditEntry> GetAuditEntries()
@@ -120,6 +159,13 @@ public sealed class SubGuardRepository : IDisposable
     {
         ArgumentNullException.ThrowIfNull(subcontractor);
         var name = Required(subcontractor.Name, nameof(subcontractor.Name));
+        if (subcontractor.OriginalContractValue < 0 || subcontractor.ApprovedChangeOrderTotal < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(subcontractor),
+                "Contract value and approved change orders must be non-negative.");
+        }
+
         using var transaction = _connection.BeginTransaction();
 
         int id;
@@ -129,8 +175,9 @@ public sealed class SubGuardRepository : IDisposable
             using var command = _connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = """
-                INSERT INTO subcontractors (name, contact_name, email, phone)
-                VALUES ($name, $contact, $email, $phone)
+                INSERT INTO subcontractors
+                    (name, contact_name, email, phone, original_contract_value, approved_change_order_total)
+                VALUES ($name, $contact, $email, $phone, $originalValue, $changeOrders)
                 RETURNING id;
                 """;
             AddSubcontractorParameters(command, subcontractor, name);
@@ -143,7 +190,9 @@ public sealed class SubGuardRepository : IDisposable
             command.Transaction = transaction;
             command.CommandText = """
                 UPDATE subcontractors
-                SET name = $name, contact_name = $contact, email = $email, phone = $phone
+                SET name = $name, contact_name = $contact, email = $email, phone = $phone,
+                    original_contract_value = $originalValue,
+                    approved_change_order_total = $changeOrders
                 WHERE id = $id;
                 """;
             AddSubcontractorParameters(command, subcontractor, name);
@@ -161,6 +210,110 @@ public sealed class SubGuardRepository : IDisposable
         transaction.Commit();
 
         return subcontractor with { Id = id, Name = name };
+    }
+
+    public IReadOnlyList<ScheduleOfValuesLine> SaveScheduleOfValues(
+        int subcontractorId,
+        IReadOnlyList<ScheduleOfValuesLine> lines)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        if (subcontractorId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(subcontractorId));
+        }
+
+        if (lines.Any(line =>
+                line.LineNumber <= 0 ||
+                string.IsNullOrWhiteSpace(line.Description) ||
+                line.ScheduledValue < 0 ||
+                line.PreviouslyBilledSnapshot < 0))
+        {
+            throw new ArgumentException(
+                "SOV lines need a positive line number, a description, and non-negative values.",
+                nameof(lines));
+        }
+
+        if (lines.Select(line => line.LineNumber).Distinct().Count() != lines.Count)
+        {
+            throw new ArgumentException("SOV line numbers must be unique.", nameof(lines));
+        }
+
+        using var transaction = _connection.BeginTransaction();
+        using var existingCommand = _connection.CreateCommand();
+        existingCommand.Transaction = transaction;
+        existingCommand.CommandText = "SELECT id FROM schedule_of_values_lines WHERE subcontractor_id = $id;";
+        existingCommand.Parameters.AddWithValue("$id", subcontractorId);
+        var existingIds = new HashSet<int>();
+        using (var reader = existingCommand.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                existingIds.Add(reader.GetInt32(0));
+            }
+        }
+
+        var retainedIds = lines.Where(line => line.Id > 0).Select(line => line.Id).ToHashSet();
+        foreach (var removedId in existingIds.Except(retainedIds))
+        {
+            using var deleteCommand = _connection.CreateCommand();
+            deleteCommand.Transaction = transaction;
+            deleteCommand.CommandText = """
+                DELETE FROM schedule_of_values_lines
+                WHERE id = $id AND subcontractor_id = $subcontractorId;
+                """;
+            deleteCommand.Parameters.AddWithValue("$id", removedId);
+            deleteCommand.Parameters.AddWithValue("$subcontractorId", subcontractorId);
+            deleteCommand.ExecuteNonQuery();
+        }
+
+        foreach (var line in lines)
+        {
+            using var command = _connection.CreateCommand();
+            command.Transaction = transaction;
+            if (line.Id == 0)
+            {
+                command.CommandText = """
+                    INSERT INTO schedule_of_values_lines
+                        (subcontractor_id, line_number, description, scheduled_value, previously_billed_snapshot)
+                    VALUES ($subcontractorId, $lineNumber, $description, $scheduledValue, $previouslyBilled)
+                    RETURNING id;
+                    """;
+            }
+            else
+            {
+                if (!existingIds.Contains(line.Id))
+                {
+                    throw new InvalidOperationException($"SOV line {line.Id} does not belong to this subcontractor.");
+                }
+
+                command.CommandText = """
+                    UPDATE schedule_of_values_lines
+                    SET line_number = $lineNumber, description = $description,
+                        scheduled_value = $scheduledValue,
+                        previously_billed_snapshot = $previouslyBilled
+                    WHERE id = $id AND subcontractor_id = $subcontractorId;
+                    """;
+                command.Parameters.AddWithValue("$id", line.Id);
+            }
+
+            command.Parameters.AddWithValue("$subcontractorId", subcontractorId);
+            command.Parameters.AddWithValue("$lineNumber", line.LineNumber);
+            command.Parameters.AddWithValue("$description", line.Description.Trim());
+            command.Parameters.AddWithValue("$scheduledValue", line.ScheduledValue.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$previouslyBilled", line.PreviouslyBilledSnapshot.ToString(CultureInfo.InvariantCulture));
+            if (line.Id == 0)
+            {
+                command.ExecuteScalar();
+            }
+            else if (command.ExecuteNonQuery() == 0)
+            {
+                throw new InvalidOperationException($"SOV line {line.Id} no longer exists.");
+            }
+        }
+
+        AddAuditEntry(transaction, "Schedule of values", subcontractorId, "Updated", $"Subcontractor #{subcontractorId}");
+        transaction.Commit();
+        return GetScheduleOfValues(subcontractorId);
     }
 
     public bool DeleteSubcontractor(int id)
@@ -202,10 +355,102 @@ public sealed class SubGuardRepository : IDisposable
             throw new ArgumentException("The period start must be on or before the period end.", nameof(application));
         }
 
+        if (application.Lines.Count == 0 ||
+            application.Lines.Any(line => line.Amount < 0) ||
+            application.Lines.All(line => line.Amount == 0))
+        {
+            throw new ArgumentException("Enter a positive claim amount using non-negative SOV line amounts.", nameof(application));
+        }
+
+        if (application.Lines.Select(line => line.ScheduleOfValuesLineId).Distinct().Count() != application.Lines.Count)
+        {
+            throw new ArgumentException("Each SOV line can appear only once in a claim.", nameof(application));
+        }
+
+        var total = application.Lines.Sum(line => line.Amount);
         var start = application.PeriodStart.ToString("O", CultureInfo.InvariantCulture);
         var end = application.PeriodEnd.ToString("O", CultureInfo.InvariantCulture);
-        var amount = application.Amount.ToString(CultureInfo.InvariantCulture);
+        var amount = total.ToString(CultureInfo.InvariantCulture);
         using var transaction = _connection.BeginTransaction();
+
+        if (application.Status != ClaimStatus.Draft)
+        {
+            throw new InvalidOperationException("Only draft claims can be created or edited.");
+        }
+
+        if (application.Id != 0)
+        {
+            using var statusCommand = _connection.CreateCommand();
+            statusCommand.Transaction = transaction;
+            statusCommand.CommandText = "SELECT status FROM pay_applications WHERE id = $id;";
+            statusCommand.Parameters.AddWithValue("$id", application.Id);
+            var status = statusCommand.ExecuteScalar() as string;
+            if (status is null)
+            {
+                throw new InvalidOperationException($"Pay application {application.Id} no longer exists.");
+            }
+
+            if (Enum.Parse<ClaimStatus>(status, ignoreCase: true) != ClaimStatus.Draft)
+            {
+                throw new InvalidOperationException("Approved or paid claim history is read-only.");
+            }
+        }
+
+        decimal originalValue;
+        decimal approvedChangeOrderTotal;
+        using (var subcontractCommand = _connection.CreateCommand())
+        {
+            subcontractCommand.Transaction = transaction;
+            subcontractCommand.CommandText = """
+                SELECT original_contract_value, approved_change_order_total
+                FROM subcontractors
+                WHERE id = $id;
+                """;
+            subcontractCommand.Parameters.AddWithValue("$id", application.SubcontractorId);
+            using var reader = subcontractCommand.ExecuteReader();
+            if (!reader.Read())
+            {
+                throw new InvalidOperationException($"Subcontractor {application.SubcontractorId} no longer exists.");
+            }
+
+            originalValue = decimal.Parse(reader.GetString(0), CultureInfo.InvariantCulture);
+            approvedChangeOrderTotal = decimal.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
+        }
+
+        ValidateNonOverlappingPeriod(transaction, application);
+        var checkedLines = new List<PayApplicationLine>(application.Lines.Count);
+        foreach (var claimLine in application.Lines)
+        {
+            var sovLine = GetSovLine(transaction, application.SubcontractorId, claimLine.ScheduleOfValuesLineId)
+                ?? throw new InvalidOperationException($"SOV line {claimLine.ScheduleOfValuesLineId} no longer exists.");
+            var priorBilled = sovLine.PreviouslyBilledSnapshot +
+                              GetPriorLineClaimAmounts(transaction, claimLine.ScheduleOfValuesLineId, application.Id);
+            var result = BillingRuleEvaluator.EvaluateR3(sovLine.ScheduledValue, priorBilled, claimLine.Amount);
+            if (!result.IsValid)
+            {
+                throw new InvalidOperationException($"SOV line {sovLine.LineNumber}: {result.Message}");
+            }
+
+            checkedLines.Add(claimLine with
+            {
+                LineNumber = sovLine.LineNumber,
+                Description = sovLine.Description,
+                PreviouslyBilledSnapshot = priorBilled
+            });
+        }
+
+        var priorClaims = GetClaimsForSubcontractor(transaction, application.SubcontractorId);
+        var r4 = BillingRuleEvaluator.EvaluateR4(
+            originalValue,
+            approvedChangeOrderTotal,
+            priorClaims,
+            application.SubcontractorId,
+            application.Id == 0 ? null : application.Id,
+            total);
+        if (!r4.IsValid)
+        {
+            throw new InvalidOperationException(r4.Message);
+        }
 
         int id;
         string action;
@@ -215,11 +460,11 @@ public sealed class SubGuardRepository : IDisposable
             command.Transaction = transaction;
             command.CommandText = """
                 INSERT INTO pay_applications
-                    (application_number, subcontractor_id, period_start, period_end, amount, notes)
-                VALUES ($number, $subcontractorId, $start, $end, $amount, $notes)
+                    (application_number, subcontractor_id, period_start, period_end, amount, notes, status)
+                VALUES ($number, $subcontractorId, $start, $end, $amount, $notes, $status)
                 RETURNING id;
                 """;
-            AddPayApplicationParameters(command, application, number, start, end, amount);
+            AddPayApplicationParameters(command, application, number, start, end, amount, application.Status);
             id = Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture);
             action = "Created";
         }
@@ -230,10 +475,11 @@ public sealed class SubGuardRepository : IDisposable
             command.CommandText = """
                 UPDATE pay_applications
                 SET application_number = $number, subcontractor_id = $subcontractorId,
-                    period_start = $start, period_end = $end, amount = $amount, notes = $notes
+                    period_start = $start, period_end = $end, amount = $amount, notes = $notes,
+                    status = $status
                 WHERE id = $id;
                 """;
-            AddPayApplicationParameters(command, application, number, start, end, amount);
+            AddPayApplicationParameters(command, application, number, start, end, amount, application.Status);
             command.Parameters.AddWithValue("$id", application.Id);
             if (command.ExecuteNonQuery() == 0)
             {
@@ -244,10 +490,43 @@ public sealed class SubGuardRepository : IDisposable
             action = "Updated";
         }
 
+        using (var deleteLines = _connection.CreateCommand())
+        {
+            deleteLines.Transaction = transaction;
+            deleteLines.CommandText = "DELETE FROM pay_application_lines WHERE pay_application_id = $id;";
+            deleteLines.Parameters.AddWithValue("$id", id);
+            deleteLines.ExecuteNonQuery();
+        }
+
+        foreach (var line in checkedLines)
+        {
+            using var command = _connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO pay_application_lines
+                    (pay_application_id, schedule_of_values_line_id, line_number, description,
+                     previously_billed_snapshot, amount)
+                VALUES ($applicationId, $sovLineId, $lineNumber, $description, $previouslyBilled, $amount);
+                """;
+            command.Parameters.AddWithValue("$applicationId", id);
+            command.Parameters.AddWithValue("$sovLineId", line.ScheduleOfValuesLineId);
+            command.Parameters.AddWithValue("$lineNumber", line.LineNumber);
+            command.Parameters.AddWithValue("$description", line.Description);
+            command.Parameters.AddWithValue("$previouslyBilled", line.PreviouslyBilledSnapshot.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("$amount", line.Amount.ToString(CultureInfo.InvariantCulture));
+            command.ExecuteNonQuery();
+        }
+
         AddAuditEntry(transaction, "Pay application", id, action, number);
         transaction.Commit();
 
-        return application with { Id = id, ApplicationNumber = number };
+        return application with
+        {
+            Id = id,
+            ApplicationNumber = number,
+            Amount = total,
+            Lines = checkedLines
+        };
     }
 
     public bool DeletePayApplication(int id)
@@ -255,9 +534,23 @@ public sealed class SubGuardRepository : IDisposable
         using var transaction = _connection.BeginTransaction();
         using var numberCommand = _connection.CreateCommand();
         numberCommand.Transaction = transaction;
-        numberCommand.CommandText = "SELECT application_number FROM pay_applications WHERE id = $id;";
+        numberCommand.CommandText = "SELECT application_number, status FROM pay_applications WHERE id = $id;";
         numberCommand.Parameters.AddWithValue("$id", id);
-        var number = numberCommand.ExecuteScalar() as string;
+        string? number;
+        using (var reader = numberCommand.ExecuteReader())
+        {
+            if (!reader.Read())
+            {
+                transaction.Commit();
+                return false;
+            }
+
+            number = reader.GetString(0);
+            if (Enum.Parse<ClaimStatus>(reader.GetString(1), ignoreCase: true) != ClaimStatus.Draft)
+            {
+                throw new InvalidOperationException("Approved or paid claim history cannot be deleted.");
+            }
+        }
 
         using var command = _connection.CreateCommand();
         command.Transaction = transaction;
@@ -286,6 +579,136 @@ public sealed class SubGuardRepository : IDisposable
         _disposed = true;
     }
 
+    private IReadOnlyList<PayApplicationLine> GetPayApplicationLines(int applicationId)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = """
+            SELECT schedule_of_values_line_id, line_number, description, previously_billed_snapshot, amount
+            FROM pay_application_lines
+            WHERE pay_application_id = $id
+            ORDER BY line_number, schedule_of_values_line_id;
+            """;
+        command.Parameters.AddWithValue("$id", applicationId);
+        using var reader = command.ExecuteReader();
+        var lines = new List<PayApplicationLine>();
+        while (reader.Read())
+        {
+            lines.Add(new PayApplicationLine
+            {
+                ScheduleOfValuesLineId = reader.GetInt32(0),
+                LineNumber = reader.GetInt32(1),
+                Description = reader.GetString(2),
+                PreviouslyBilledSnapshot = decimal.Parse(reader.GetString(3), CultureInfo.InvariantCulture),
+                Amount = decimal.Parse(reader.GetString(4), CultureInfo.InvariantCulture)
+            });
+        }
+
+        return lines;
+    }
+
+    private static void ValidateNonOverlappingPeriod(SqliteTransaction transaction, PayApplication application)
+    {
+        using var command = transaction.Connection!.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT id, period_start, period_end
+            FROM pay_applications
+            WHERE subcontractor_id = $subcontractorId AND id <> $currentId;
+            """;
+        command.Parameters.AddWithValue("$subcontractorId", application.SubcontractorId);
+        command.Parameters.AddWithValue("$currentId", application.Id);
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            var start = DateTime.Parse(reader.GetString(1), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).Date;
+            var end = DateTime.Parse(reader.GetString(2), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind).Date;
+            if (application.PeriodStart.Date <= end && application.PeriodEnd.Date >= start)
+            {
+                throw new InvalidOperationException("Claim periods for the same subcontract cannot overlap.");
+            }
+        }
+    }
+
+    private static ScheduleOfValuesLine? GetSovLine(
+        SqliteTransaction transaction,
+        int subcontractorId,
+        int lineId)
+    {
+        using var command = transaction.Connection!.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT id, subcontractor_id, line_number, description, scheduled_value,
+                   previously_billed_snapshot
+            FROM schedule_of_values_lines
+            WHERE id = $lineId AND subcontractor_id = $subcontractorId;
+            """;
+        command.Parameters.AddWithValue("$lineId", lineId);
+        command.Parameters.AddWithValue("$subcontractorId", subcontractorId);
+        using var reader = command.ExecuteReader();
+        return reader.Read()
+            ? new ScheduleOfValuesLine
+            {
+                Id = reader.GetInt32(0),
+                SubcontractorId = reader.GetInt32(1),
+                LineNumber = reader.GetInt32(2),
+                Description = reader.GetString(3),
+                ScheduledValue = decimal.Parse(reader.GetString(4), CultureInfo.InvariantCulture),
+                PreviouslyBilledSnapshot = decimal.Parse(reader.GetString(5), CultureInfo.InvariantCulture)
+            }
+            : null;
+    }
+
+    private static decimal GetPriorLineClaimAmounts(
+        SqliteTransaction transaction,
+        int sovLineId,
+        int currentApplicationId)
+    {
+        using var command = transaction.Connection!.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT l.amount
+            FROM pay_application_lines l
+            INNER JOIN pay_applications p ON p.id = l.pay_application_id
+            WHERE l.schedule_of_values_line_id = $lineId AND p.id <> $currentApplicationId;
+            """;
+        command.Parameters.AddWithValue("$lineId", sovLineId);
+        command.Parameters.AddWithValue("$currentApplicationId", currentApplicationId);
+        using var reader = command.ExecuteReader();
+        var amount = 0m;
+        while (reader.Read())
+        {
+            amount += decimal.Parse(reader.GetString(0), CultureInfo.InvariantCulture);
+        }
+
+        return amount;
+    }
+
+    private static IReadOnlyList<ClaimBillingHistory> GetClaimsForSubcontractor(
+        SqliteTransaction transaction,
+        int subcontractorId)
+    {
+        using var command = transaction.Connection!.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT id, subcontractor_id, status, amount
+            FROM pay_applications
+            WHERE subcontractor_id = $subcontractorId;
+            """;
+        command.Parameters.AddWithValue("$subcontractorId", subcontractorId);
+        using var reader = command.ExecuteReader();
+        var claims = new List<ClaimBillingHistory>();
+        while (reader.Read())
+        {
+            claims.Add(new ClaimBillingHistory(
+                reader.GetInt32(0),
+                reader.GetInt32(1),
+                Enum.Parse<ClaimStatus>(reader.GetString(2), ignoreCase: true),
+                decimal.Parse(reader.GetString(3), CultureInfo.InvariantCulture)));
+        }
+
+        return claims;
+    }
+
     private void InitializeDatabase()
     {
         using var command = _connection.CreateCommand();
@@ -295,7 +718,9 @@ public sealed class SubGuardRepository : IDisposable
                 name TEXT NOT NULL,
                 contact_name TEXT NOT NULL DEFAULT '',
                 email TEXT NOT NULL DEFAULT '',
-                phone TEXT NOT NULL DEFAULT ''
+                phone TEXT NOT NULL DEFAULT '',
+                original_contract_value TEXT NOT NULL DEFAULT '0',
+                approved_change_order_total TEXT NOT NULL DEFAULT '0'
             );
 
             CREATE TABLE IF NOT EXISTS pay_applications (
@@ -305,7 +730,28 @@ public sealed class SubGuardRepository : IDisposable
                 period_start TEXT NOT NULL,
                 period_end TEXT NOT NULL,
                 amount TEXT NOT NULL,
-                notes TEXT NOT NULL DEFAULT ''
+                notes TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'Draft'
+            );
+
+            CREATE TABLE IF NOT EXISTS schedule_of_values_lines (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                subcontractor_id INTEGER NOT NULL REFERENCES subcontractors(id) ON DELETE CASCADE,
+                line_number INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                scheduled_value TEXT NOT NULL,
+                previously_billed_snapshot TEXT NOT NULL DEFAULT '0',
+                UNIQUE (subcontractor_id, line_number)
+            );
+
+            CREATE TABLE IF NOT EXISTS pay_application_lines (
+                pay_application_id INTEGER NOT NULL REFERENCES pay_applications(id) ON DELETE CASCADE,
+                schedule_of_values_line_id INTEGER NOT NULL REFERENCES schedule_of_values_lines(id) ON DELETE RESTRICT,
+                line_number INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                previously_billed_snapshot TEXT NOT NULL,
+                amount TEXT NOT NULL,
+                PRIMARY KEY (pay_application_id, schedule_of_values_line_id)
             );
 
             CREATE TABLE IF NOT EXISTS audit_entries (
@@ -318,6 +764,40 @@ public sealed class SubGuardRepository : IDisposable
             );
             """;
         command.ExecuteNonQuery();
+
+        EnsureColumn("subcontractors", "original_contract_value", "TEXT NOT NULL DEFAULT '0'");
+        EnsureColumn("subcontractors", "approved_change_order_total", "TEXT NOT NULL DEFAULT '0'");
+        EnsureColumn("pay_applications", "status", "TEXT NOT NULL DEFAULT 'Approved'");
+        using var versionCommand = _connection.CreateCommand();
+        versionCommand.CommandText = "PRAGMA user_version = 1;";
+        versionCommand.ExecuteNonQuery();
+    }
+
+    private void EnsureColumn(string table, string column, string definition)
+    {
+        using var command = _connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info({table});";
+        var exists = false;
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (reader.GetString(1) == column)
+                {
+                    exists = true;
+                    break;
+                }
+            }
+        }
+
+        if (exists)
+        {
+            return;
+        }
+
+        using var alter = _connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+        alter.ExecuteNonQuery();
     }
 
     private static void AddSubcontractorParameters(SqliteCommand command, Subcontractor subcontractor, string name)
@@ -326,6 +806,8 @@ public sealed class SubGuardRepository : IDisposable
         command.Parameters.AddWithValue("$contact", subcontractor.ContactName.Trim());
         command.Parameters.AddWithValue("$email", subcontractor.Email.Trim());
         command.Parameters.AddWithValue("$phone", subcontractor.Phone.Trim());
+        command.Parameters.AddWithValue("$originalValue", subcontractor.OriginalContractValue.ToString(CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$changeOrders", subcontractor.ApprovedChangeOrderTotal.ToString(CultureInfo.InvariantCulture));
     }
 
     private static void AddPayApplicationParameters(
@@ -334,7 +816,8 @@ public sealed class SubGuardRepository : IDisposable
         string number,
         string start,
         string end,
-        string amount)
+        string amount,
+        ClaimStatus status)
     {
         command.Parameters.AddWithValue("$number", number);
         command.Parameters.AddWithValue("$subcontractorId", application.SubcontractorId);
@@ -342,6 +825,7 @@ public sealed class SubGuardRepository : IDisposable
         command.Parameters.AddWithValue("$end", end);
         command.Parameters.AddWithValue("$amount", amount);
         command.Parameters.AddWithValue("$notes", application.Notes.Trim());
+        command.Parameters.AddWithValue("$status", status.ToString());
     }
 
     private void AddAuditEntry(SqliteTransaction transaction, string entityType, int entityId, string action, string summary)

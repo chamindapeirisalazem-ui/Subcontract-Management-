@@ -1,6 +1,6 @@
 # SubGuard Desktop
 
-SubGuard Desktop is an offline-first Windows WPF starter for managing subcontractors and their pay applications. This first milestone provides local CRUD and an audit history; it does not evaluate approval or compliance policies.
+SubGuard Desktop is an offline-first Windows WPF app for managing subcontractors, schedules of values, and pay applications.
 
 ## Run
 
@@ -16,11 +16,15 @@ The SQLite database is created at `%LOCALAPPDATA%\SubGuard\subguard.db`.
 ## Included
 
 - Create, edit, and delete subcontractor records.
-- Create, edit, and delete pay applications, with period dates, amount, and notes.
+- Maintain each subcontract's original value, approved change-order total, and SOV lines.
+- Enter pay applications as SOV line claims with live R3/R4 validation and a save-time recheck.
+- Prevent overlapping claim periods and reject negative line claims; zero lines are allowed when the total claim is positive.
 - View an append-only audit history of successful record changes.
-- Keep pay applications linked to subcontractors; a subcontractor with linked applications cannot be deleted.
+- Keep claims and SOV lines linked to subcontractors; a subcontractor with linked claims cannot be deleted.
 
-R1–R6 policy enforcement, AI intake, and PDF export are intentionally deferred until their requirements are confirmed.
+R3 limits prior billed plus the current claim to each SOV scheduled value. R4 limits prior approved/paid claims plus the current claim to the original subcontract value plus approved change orders. Existing milestone-1 pay applications migrate as approved history; new claims are drafts. Drafts remain editable; approved/paid history is read-only so it cannot be removed from billing-cap calculations.
+
+R1, R2, R5, R6, approval workflow, AI intake, and PDF export remain out of scope.
 
 ## Verify
 

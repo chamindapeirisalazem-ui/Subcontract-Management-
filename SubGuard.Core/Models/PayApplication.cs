@@ -10,4 +10,6 @@ public sealed record PayApplication
     public DateTime PeriodEnd { get; init; }
     public decimal Amount { get; init; }
     public string Notes { get; init; } = string.Empty;
+    public ClaimStatus Status { get; init; } = ClaimStatus.Draft;
+    public IReadOnlyList<PayApplicationLine> Lines { get; init; } = [];
 }

@@ -7,4 +7,6 @@ public sealed record Subcontractor
     public string ContactName { get; init; } = string.Empty;
     public string Email { get; init; } = string.Empty;
     public string Phone { get; init; } = string.Empty;
+    public decimal OriginalContractValue { get; init; }
+    public decimal ApprovedChangeOrderTotal { get; init; }
 }
