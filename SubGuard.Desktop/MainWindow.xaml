@@ -61,13 +61,65 @@
     </Window.Resources>
 
     <Grid Margin="28">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" MinWidth="150" MaxWidth="210" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" Margin="0,0,0,20">
+        <Border Grid.Column="0" Grid.RowSpan="3" Margin="0,0,20,0" Padding="8" Background="White"
+                BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6">
+            <ListBox x:Name="NavigationList"
+                     AutomationProperties.Name="Main navigation"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     KeyboardNavigation.TabNavigation="Once"
+                     SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+                <ListBox.Resources>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="Padding" Value="12,10" />
+                        <Setter Property="Margin" Value="0,0,0,2" />
+                        <Setter Property="Foreground" Value="#172B4D" />
+                        <Setter Property="FontWeight" Value="Normal" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent"
+                                            BorderThickness="3,0,0,0" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#F1F5F9" />
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#E8F0FE" />
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#2563EB" />
+                                            <Setter Property="Foreground" Value="#2563EB" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </Trigger>
+                                        <Trigger Property="IsKeyboardFocused" Value="True">
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#172B4D" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ListBox.Resources>
+                <ListBoxItem Content="Subcontractors" />
+                <ListBoxItem Content="Schedule of values" />
+                <ListBoxItem Content="Pay applications" />
+                <ListBoxItem Content="Approval workspace" />
+                <ListBoxItem Content="Audit history" />
+            </ListBox>
+        </Border>
+
+        <Grid Grid.Column="1" Grid.Row="0" Margin="0,0,0,20">
             <StackPanel>
                 <TextBlock Text="SUBGUARD" FontSize="13" FontWeight="Bold" Foreground="#2563EB" />
                 <TextBlock Text="Subcontractor pay applications" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Margin="0,4,0,0" />
@@ -80,7 +132,13 @@
             </Border>
         </Grid>
 
-        <TabControl Grid.Row="1" Background="White" BorderBrush="#E2E8F0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+        <TabControl Grid.Column="1" Grid.Row="1" Background="White" BorderBrush="#E2E8F0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
+                    KeyboardNavigation.TabNavigation="Local">
+            <TabControl.ItemContainerStyle>
+                <Style TargetType="TabItem">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </Style>
+            </TabControl.ItemContainerStyle>
             <TabItem Header="Subcontractors" Padding="16,9">
                 <Grid Margin="16">
                     <Grid.ColumnDefinitions>
@@ -420,6 +478,6 @@
             </TabItem>
         </TabControl>
 
-        <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Foreground="{StaticResource MutedBrush}" Margin="2,12,0,0" />
+        <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding StatusMessage}" Foreground="{StaticResource MutedBrush}" Margin="2,12,0,0" />
     </Grid>
 </Window>
