@@ -1,68 +1,19 @@
-﻿<Window x:Class="SubGuard.Desktop.MainWindow"
+<Window x:Class="SubGuard.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="SubGuard Desktop"
-        Height="760"
-        Width="1180"
-        MinHeight="660"
-        MinWidth="980"
-        Background="#F3F5F8"
-        FontFamily="Segoe UI">
-    <Window.Resources>
-        <SolidColorBrush x:Key="InkBrush" Color="#172B4D" />
-        <SolidColorBrush x:Key="MutedBrush" Color="#64748B" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#2563EB" />
-        <Style TargetType="Button">
-            <Setter Property="Padding" Value="14,8" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="#E7EDF5" />
-            <Setter Property="Foreground" Value="#172B4D" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-            <Setter Property="Foreground" Value="White" />
-        </Style>
-        <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="9,7" />
-            <Setter Property="Margin" Value="0,4,0,10" />
-            <Setter Property="BorderBrush" Value="#CBD5E1" />
-        </Style>
-        <Style TargetType="ComboBox">
-            <Setter Property="Padding" Value="7" />
-            <Setter Property="Margin" Value="0,4,0,10" />
-        </Style>
-        <Style TargetType="DatePicker">
-            <Setter Property="Padding" Value="4" />
-            <Setter Property="Margin" Value="0,4,0,10" />
-        </Style>
-        <Style TargetType="DataGrid">
-            <Setter Property="AutoGenerateColumns" Value="False" />
-            <Setter Property="CanUserAddRows" Value="False" />
-            <Setter Property="IsReadOnly" Value="True" />
-            <Setter Property="SelectionMode" Value="Single" />
-            <Setter Property="SelectionUnit" Value="FullRow" />
-            <Setter Property="HeadersVisibility" Value="Column" />
-            <Setter Property="GridLinesVisibility" Value="Horizontal" />
-            <Setter Property="HorizontalGridLinesBrush" Value="#E8EDF3" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="RowHeight" Value="38" />
-            <Setter Property="ColumnHeaderHeight" Value="40" />
-        </Style>
-        <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background" Value="#F8FAFC" />
-            <Setter Property="Foreground" Value="#64748B" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Padding" Value="9,0" />
-            <Setter Property="BorderThickness" Value="0,0,0,1" />
-            <Setter Property="BorderBrush" Value="#E8EDF3" />
-        </Style>
-    </Window.Resources>
+        Height="800"
+        Width="1280"
+        MinHeight="680"
+        MinWidth="1040"
+        Background="{DynamicResource CanvasBrush}"
+        FontFamily="Segoe UI"
+        FontSize="14">
+    <Window.Resources />
 
-    <Grid Margin="28">
+    <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" MinWidth="150" MaxWidth="210" />
+            <ColumnDefinition Width="220" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -71,180 +22,309 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Column="0" Grid.RowSpan="3" Margin="0,0,20,0" Padding="8" Background="White"
-                BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6">
-            <ListBox x:Name="NavigationList"
-                     AutomationProperties.Name="Main navigation"
-                     BorderThickness="0"
-                     Background="Transparent"
-                     KeyboardNavigation.TabNavigation="Once"
-                     SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
-                <ListBox.Resources>
-                    <Style TargetType="ListBoxItem">
-                        <Setter Property="Padding" Value="12,10" />
-                        <Setter Property="Margin" Value="0,0,0,2" />
-                        <Setter Property="Foreground" Value="#172B4D" />
-                        <Setter Property="FontWeight" Value="Normal" />
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent"
-                                            BorderThickness="3,0,0,0" CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}" />
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#F1F5F9" />
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#E8F0FE" />
-                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#2563EB" />
-                                            <Setter Property="Foreground" Value="#2563EB" />
-                                            <Setter Property="FontWeight" Value="SemiBold" />
-                                        </Trigger>
-                                        <Trigger Property="IsKeyboardFocused" Value="True">
-                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#172B4D" />
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </ListBox.Resources>
-                <ListBoxItem Content="Subcontractors" />
-                <ListBoxItem Content="Schedule of values" />
-                <ListBoxItem Content="Pay applications" />
-                <ListBoxItem Content="Approval workspace" />
-                <ListBoxItem Content="Audit history" />
-            </ListBox>
+        <Border Grid.Column="0" Grid.RowSpan="3" Padding="12,16" Background="{DynamicResource SurfaceBrush}"
+                BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="12,0,0,24">
+                    <TextBlock Text="SUBGUARD" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
+                    <TextBlock Text="Pay application control" Style="{StaticResource MutedText}" FontSize="12" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="12,12,0,0">
+                    <ContentControl Content="Local data" Style="{StaticResource StatusChip}" />
+                </StackPanel>
+                <ListBox x:Name="NavigationList"
+                         AutomationProperties.Name="Main navigation"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         ItemContainerStyle="{StaticResource NavItem}"
+                         KeyboardNavigation.TabNavigation="Once"
+                         SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}">
+                    <ListBoxItem Content="Projects" ToolTip="Ctrl+1" AutomationProperties.AccessKey="Ctrl+1" />
+                    <ListBoxItem Content="Subcontracts" ToolTip="Ctrl+2" AutomationProperties.AccessKey="Ctrl+2" />
+                    <ListBoxItem Content="Pay applications" ToolTip="Ctrl+3" AutomationProperties.AccessKey="Ctrl+3" />
+                    <ListBoxItem Content="Compliance" ToolTip="Ctrl+4" AutomationProperties.AccessKey="Ctrl+4" />
+                    <ListBoxItem Content="Audit history" ToolTip="Ctrl+5" AutomationProperties.AccessKey="Ctrl+5" />
+                </ListBox>
+            </DockPanel>
         </Border>
 
-        <Grid Grid.Column="1" Grid.Row="0" Margin="0,0,0,20">
-            <StackPanel>
-                <TextBlock Text="SUBGUARD" FontSize="13" FontWeight="Bold" Foreground="#2563EB" />
-                <TextBlock Text="Subcontractor pay applications" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Margin="0,4,0,0" />
-            </StackPanel>
-            <Border HorizontalAlignment="Right" VerticalAlignment="Center" Background="#E5F4EB" CornerRadius="12" Padding="11,6">
-                <StackPanel Orientation="Horizontal">
-                    <Ellipse Width="7" Height="7" Fill="#16804A" VerticalAlignment="Center" Margin="0,0,7,0" />
-                    <TextBlock Text="LOCAL DATA" FontSize="10" FontWeight="Bold" Foreground="#16804A" />
-                </StackPanel>
-            </Border>
-        </Grid>
+        <StackPanel Grid.Column="1" Grid.Row="0" Margin="24,16,24,8">
+            <TextBlock Text="{Binding ContextLine}" Style="{StaticResource MutedText}" FontSize="12"
+                       AutomationProperties.Name="Current context" />
+            <TextBlock Text="{Binding PageName}" Style="{StaticResource PageTitle}" Margin="0,4,0,0" />
+        </StackPanel>
 
-        <TabControl Grid.Column="1" Grid.Row="1" Background="White" BorderBrush="#E2E8F0" SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
+        <TabControl Grid.Column="1" Grid.Row="1" Margin="24,8,24,0" Background="Transparent" BorderThickness="0"
+                    SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
                     KeyboardNavigation.TabNavigation="Local">
             <TabControl.ItemContainerStyle>
-                <Style TargetType="TabItem">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                </Style>
+                <StaticResource ResourceKey="HiddenTabItem" />
             </TabControl.ItemContainerStyle>
-            <TabItem Header="Subcontractors" Padding="16,9">
-                <Grid Margin="16">
+            <TabItem Header="Projects">
+                <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1.25*" />
+                        <ColumnDefinition Width="1.4*" />
                         <ColumnDefinition Width="16" />
-                        <ColumnDefinition Width="0.85*" />
+                        <ColumnDefinition Width="*" MinWidth="340" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
-                        <DataGrid ItemsSource="{Binding Subcontractors}" SelectedItem="{Binding SelectedSubcontractor, Mode=TwoWay}">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Subcontractor" Binding="{Binding Name}" Width="2*" />
-                                <DataGridTextColumn Header="Contact" Binding="{Binding ContactName}" Width="*" />
-                                <DataGridTextColumn Header="Email" Binding="{Binding Email}" Width="1.3*" />
-                                <DataGridTextColumn Header="Phone" Binding="{Binding Phone}" Width="*" />
-                            </DataGrid.Columns>
-                        </DataGrid>
+                    <Border Grid.Column="0" Style="{StaticResource Card}" Padding="16,12">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
+                                <StackPanel Margin="0,0,16,0">
+                                    <TextBlock Text="Search" Style="{StaticResource FieldLabel}" />
+                                    <TextBox x:Name="ProjectSearchBox" Width="260" Margin="0"
+                                             AutomationProperties.Name="Search projects"
+                                             Text="{Binding ProjectSearchText, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,16,0">
+                                    <TextBlock Text="Status" Style="{StaticResource FieldLabel}" />
+                                    <ComboBox Width="130" Margin="0" AutomationProperties.Name="Project status filter"
+                                              ItemsSource="{Binding ProjectStatusFilters}"
+                                              SelectedItem="{Binding ProjectStatusFilter, Mode=TwoWay}" />
+                                </StackPanel>
+                                <Button Content="Clear filters" VerticalAlignment="Bottom" Command="{Binding ClearProjectFiltersCommand}" />
+                            </StackPanel>
+                            <Border DockPanel.Dock="Top" Background="{DynamicResource FailBgBrush}" BorderBrush="{DynamicResource FailBrush}"
+                                    BorderThickness="1" CornerRadius="4" Padding="12,8" Margin="0,0,0,12"
+                                    Visibility="{Binding ProjectsError, Converter={StaticResource StringToVisibility}}">
+                                <TextBlock Text="{Binding ProjectsError}" Foreground="{DynamicResource FailBrush}" TextWrapping="Wrap"
+                                           AutomationProperties.LiveSetting="Assertive" />
+                            </Border>
+                            <Grid>
+                                <DataGrid ItemsSource="{Binding ProjectsView}" SelectedItem="{Binding SelectedProject, Mode=TwoWay}"
+                                          CanUserSortColumns="True" AutomationProperties.Name="Projects">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Project no." Binding="{Binding ProjectNumber}" SortMemberPath="ProjectNumber" Width="*" />
+                                        <DataGridTextColumn Header="Name" Binding="{Binding Name}" SortMemberPath="Name" Width="2*" />
+                                        <DataGridTextColumn Header="Owner" Binding="{Binding OwnerName}" SortMemberPath="OwnerName" Width="1.3*" />
+                                        <DataGridTemplateColumn Header="Status" SortMemberPath="Status" Width="110">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ContentControl Content="{Binding Status}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Text="{Binding ProjectsEmptyMessage}" Style="{StaticResource MutedText}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap"
+                                           Margin="24,40,24,0" IsHitTestVisible="False"
+                                           Visibility="{Binding ProjectsEmptyMessage, Converter={StaticResource StringToVisibility}}" />
+                            </Grid>
+                        </DockPanel>
                     </Border>
-                    <Border Grid.Column="2" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="20">
+                    <Border Grid.Column="2" Style="{StaticResource Card}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel>
-                                <TextBlock Text="Subcontractor details" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Margin="0,0,0,14" />
-                                <TextBlock Text="Company / subcontractor name" Foreground="{StaticResource MutedBrush}" />
-                                <TextBox Text="{Binding SubcontractorName, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Contact person" Foreground="{StaticResource MutedBrush}" />
-                                <TextBox Text="{Binding ContactName, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Email" Foreground="{StaticResource MutedBrush}" />
-                                <TextBox Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Phone" Foreground="{StaticResource MutedBrush}" />
-                                <TextBox Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Original subcontract value" Foreground="{StaticResource MutedBrush}" />
-                                <TextBox Text="{Binding OriginalContractValueText, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Approved change orders" Foreground="{StaticResource MutedBrush}" />
-                                <TextBox Text="{Binding ApprovedChangeOrderTotalText, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Retainage percent" Foreground="{StaticResource MutedBrush}" />
-                                <TextBox Text="{Binding RetainagePercentText, UpdateSourceTrigger=PropertyChanged}" />
-                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                    <Button Content="New" Command="{Binding NewSubcontractorCommand}" />
-                                    <Button Content="Save" Command="{Binding SaveSubcontractorCommand}" Style="{StaticResource PrimaryButton}" />
-                                    <Button Content="Delete" Command="{Binding DeleteSubcontractorCommand}" />
+                                <TextBlock Text="Project details" Style="{StaticResource SectionTitle}" />
+                                <TextBlock Text="Project number" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding ProjectNumber, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Project name" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Owner" Style="{StaticResource FieldLabel}" />
+                                <TextBox Text="{Binding ProjectOwner, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Status" Style="{StaticResource FieldLabel}" />
+                                <ComboBox ItemsSource="{Binding ProjectStatuses}" SelectedItem="{Binding ProjectStatus, Mode=TwoWay}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,16">
+                                    <Button Content="New project" Command="{Binding NewProjectCommand}" />
+                                    <Button Content="Save" Command="{Binding SaveProjectCommand}" Style="{StaticResource PrimaryButton}" />
+                                    <Button Content="Delete" Command="{Binding DeleteProjectCommand}" Style="{StaticResource DangerButton}" />
                                 </StackPanel>
+                                <TextBlock Text="Subcontracts in this project" Style="{StaticResource SectionTitle}" />
+                                <DataGrid ItemsSource="{Binding ProjectSubcontracts}" MaxHeight="220"
+                                          AutomationProperties.Name="Subcontracts in this project"
+                                          SelectedItem="{Binding SelectedSubcontractRow, Mode=TwoWay}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Subcontract" Binding="{Binding Name}" Width="*" />
+                                        <DataGridTemplateColumn Header="Compliance" Width="130"
+                                                                SortMemberPath="ComplianceStatus">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ContentControl Content="{Binding ComplianceStatus}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Text="Select a project to list its subcontracts. Assign a subcontract to a project on the Subcontracts page." />
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
                 </Grid>
             </TabItem>
-
-            <TabItem Header="Schedule of values" Padding="16,9">
-                <DockPanel Margin="16">
-                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
-                        <TextBlock Text="Subcontractor" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />
-                        <ComboBox Width="260"
-                                  ItemsSource="{Binding Subcontractors}"
-                                  DisplayMemberPath="Name"
-                                  SelectedItem="{Binding SelectedSovSubcontractor, Mode=TwoWay}" />
-                        <Button Content="Add line" Command="{Binding AddScheduleLineCommand}" />
-                        <Button Content="Remove line" Command="{Binding RemoveScheduleLineCommand}" />
-                        <Button Content="Save schedule" Command="{Binding SaveScheduleCommand}" Style="{StaticResource PrimaryButton}" />
-                    </StackPanel>
-                    <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
-                        <DataGrid ItemsSource="{Binding ScheduleLines}"
-                                  SelectedItem="{Binding SelectedScheduleLine, Mode=TwoWay}"
-                                  IsReadOnly="False">
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Line" Binding="{Binding LineNumber, UpdateSourceTrigger=PropertyChanged}" Width="75" />
-                                <DataGridTextColumn Header="Description" Binding="{Binding Description, UpdateSourceTrigger=PropertyChanged}" Width="2*" />
-                                <DataGridTextColumn Header="Scheduled value" Binding="{Binding ScheduledValue, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
-                                <DataGridTextColumn Header="Previously billed" Binding="{Binding PreviouslyBilledSnapshot, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
-                            </DataGrid.Columns>
-                        </DataGrid>
+            <TabItem Header="Subcontracts">
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" MinWidth="360" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="1.5*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Style="{StaticResource Card}" Padding="16,12">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="Subcontracts" Style="{StaticResource SectionTitle}" />
+                            <Grid>
+                                <DataGrid ItemsSource="{Binding SubcontractRows}" SelectedItem="{Binding SelectedSubcontractRow, Mode=TwoWay}"
+                                          AutomationProperties.Name="Subcontracts">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Subcontractor" Binding="{Binding Name}" Width="1.6*" />
+                                        <DataGridTextColumn Header="Project" Binding="{Binding ProjectLabel}" Width="*" />
+                                        <DataGridTemplateColumn Header="Compliance" SortMemberPath="ComplianceStatus" Width="140">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ContentControl Content="{Binding ComplianceStatus}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </DockPanel>
                     </Border>
-                </DockPanel>
+                    <Border Grid.Column="2" Style="{StaticResource Card}" Padding="16,8,16,16">
+                        <TabControl BorderThickness="0" Background="Transparent">
+                            <TabItem Header="Details">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="0,16,0,0">
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="16" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="Company / subcontractor name" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Text="{Binding SubcontractorName, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Text="Project" Style="{StaticResource FieldLabel}" />
+                                                <ComboBox ItemsSource="{Binding ProjectChoices}" DisplayMemberPath="Label"
+                                                          SelectedValuePath="Id" SelectedValue="{Binding SubcontractProjectId, Mode=TwoWay}" />
+                                                <TextBlock Text="Contact person" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Text="{Binding ContactName, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Text="Email" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Text="{Binding Email, UpdateSourceTrigger=PropertyChanged}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="Phone" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Text="{Binding Phone, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Text="Original subcontract value" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Text="{Binding OriginalContractValueText, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Text="Approved change orders" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Text="{Binding ApprovedChangeOrderTotalText, UpdateSourceTrigger=PropertyChanged}" />
+                                                <TextBlock Text="Retainage percent" Style="{StaticResource FieldLabel}" />
+                                                <TextBox Text="{Binding RetainagePercentText, UpdateSourceTrigger=PropertyChanged}" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Content="New" Command="{Binding NewSubcontractorCommand}" />
+                                            <Button Content="Save" Command="{Binding SaveSubcontractorCommand}" Style="{StaticResource PrimaryButton}" />
+                                            <Button Content="Delete" Command="{Binding DeleteSubcontractorCommand}" Style="{StaticResource DangerButton}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="Schedule of values">
+                                <DockPanel Margin="0,16,0,0">
+                                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
+                                        <Button Content="Add line" Command="{Binding AddScheduleLineCommand}" />
+                                        <Button Content="Remove line" Command="{Binding RemoveScheduleLineCommand}" />
+                                        <Button Content="Save schedule" Command="{Binding SaveScheduleCommand}" Style="{StaticResource PrimaryButton}" />
+                                    </StackPanel>
+                                    <DataGrid ItemsSource="{Binding ScheduleLines}"
+                                              SelectedItem="{Binding SelectedScheduleLine, Mode=TwoWay}"
+                                              IsReadOnly="False" AutomationProperties.Name="Schedule of values">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Line" Binding="{Binding LineNumber, UpdateSourceTrigger=PropertyChanged}" Width="75" />
+                                            <DataGridTextColumn Header="Description" Binding="{Binding Description, UpdateSourceTrigger=PropertyChanged}" Width="2*" />
+                                            <DataGridTextColumn Header="Scheduled value" Binding="{Binding ScheduledValue, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
+                                            <DataGridTextColumn Header="Previously billed" Binding="{Binding PreviouslyBilledSnapshot, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </DockPanel>
+                            </TabItem>
+                            <TabItem Header="Pay applications">
+                                <DataGrid Margin="0,16,0,0" ItemsSource="{Binding SubcontractPayApplications}"
+                                          AutomationProperties.Name="Pay applications for this subcontract">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Application" Binding="{Binding ApplicationNumber}" Width="*" />
+                                        <DataGridTextColumn Header="Period end" Binding="{Binding PeriodEnd, StringFormat={}{0:yyyy-MM-dd}}" Width="*" />
+                                        <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="*" />
+                                        <DataGridTemplateColumn Header="Status" Width="170" SortMemberPath="Status">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ContentControl Content="{Binding Status}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </TabItem>
+                            <TabItem Header="Compliance">
+                                <DockPanel Margin="0,16,0,0">
+                                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
+                                        <TextBlock Text="Overall:" VerticalAlignment="Center" Margin="0,0,8,0" Style="{StaticResource MutedText}" />
+                                        <ContentControl Content="{Binding SubcontractComplianceStatus}" Style="{StaticResource StatusChip}" />
+                                    </StackPanel>
+                                    <DataGrid ItemsSource="{Binding SubcontractCompliance}" AutomationProperties.Name="Compliance evidence for this subcontract">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="*" />
+                                            <DataGridTextColumn Header="Document number" Binding="{Binding DocumentNumber}" Width="1.4*" />
+                                            <DataGridTextColumn Header="Expires" Binding="{Binding ExpiryDate, StringFormat={}{0:yyyy-MM-dd}}" Width="*" />
+                                            <DataGridTemplateColumn Header="Today" Width="150" SortMemberPath="CurrentDayStatus">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <ContentControl Content="{Binding CurrentDayStatus}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </DockPanel>
+                            </TabItem>
+                        </TabControl>
+                    </Border>
+                </Grid>
             </TabItem>
 
-            <TabItem Header="Pay applications" Padding="16,9">
-                <Grid Margin="16">
+            <TabItem Header="Pay applications">
+                <Grid Margin="0,0,0,8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="0.9*" />
                         <ColumnDefinition Width="16" />
                         <ColumnDefinition Width="1.1*" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
-                        <DataGrid ItemsSource="{Binding PayApplications}" SelectedItem="{Binding SelectedPayApplication, Mode=TwoWay}">
+                    <Border Grid.Column="0" Style="{StaticResource Card}" Padding="16,12">
+                        <DataGrid ItemsSource="{Binding PayApplications}" SelectedItem="{Binding SelectedPayApplication, Mode=TwoWay}"
+                                  AutomationProperties.Name="Pay applications">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Application" Binding="{Binding ApplicationNumber}" Width="*" />
                                 <DataGridTextColumn Header="Subcontractor" Binding="{Binding SubcontractorName}" Width="1.5*" />
                                 <DataGridTextColumn Header="Period end" Binding="{Binding PeriodEnd, StringFormat={}{0:yyyy-MM-dd}}" Width="*" />
                                 <DataGridTextColumn Header="Amount" Binding="{Binding Amount, StringFormat={}{0:N2}}" Width="*" />
-                                <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="*" />
+                                <DataGridTemplateColumn Header="Status" Width="170" SortMemberPath="Status">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ContentControl Content="{Binding Status}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
                             </DataGrid.Columns>
                         </DataGrid>
                     </Border>
-                    <Border Grid.Column="2" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="20">
+                    <Border Grid.Column="2" Style="{StaticResource Card}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel>
-                                <TextBlock Text="Pay-application details" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" Margin="0,0,0,14" />
-                                <TextBlock Text="Application number" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock Text="Pay-application details" Style="{StaticResource SectionTitle}" />
+                                <TextBlock Text="Application number" Style="{StaticResource FieldLabel}" />
                                 <TextBox Text="{Binding ApplicationNumber, UpdateSourceTrigger=PropertyChanged}" />
-                                <TextBlock Text="Subcontractor" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock Text="Subcontractor" Style="{StaticResource FieldLabel}" />
                                 <ComboBox ItemsSource="{Binding Subcontractors}"
                                           DisplayMemberPath="Name"
                                           SelectedItem="{Binding SelectedApplicationSubcontractor, Mode=TwoWay}" />
-                                <TextBlock Text="Period start" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock Text="Period start" Style="{StaticResource FieldLabel}" />
                                 <DatePicker SelectedDate="{Binding PeriodStart, Mode=TwoWay}" />
-                                <TextBlock Text="Period end" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock Text="Period end" Style="{StaticResource FieldLabel}" />
                                 <DatePicker SelectedDate="{Binding PeriodEnd, Mode=TwoWay}" />
-                                <TextBlock Text="Claim lines" Foreground="{StaticResource MutedBrush}" Margin="0,4,0,3" />
+                                <TextBlock Text="Claim lines" Style="{StaticResource FieldLabel}" />
                                 <DataGrid ItemsSource="{Binding ClaimLines}" Height="210" MinHeight="130" IsReadOnly="False" CanUserAddRows="False" Margin="0,0,0,8">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Line" Binding="{Binding LineNumber}" IsReadOnly="True" Width="50" />
@@ -255,20 +335,33 @@
                                         <DataGridTextColumn Header="This claim" Binding="{Binding Amount, UpdateSourceTrigger=PropertyChanged, StringFormat={}{0:N2}}" Width="*" />
                                     </DataGrid.Columns>
                                 </DataGrid>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                                    <TextBlock Text="Claim total: " FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
-                                    <TextBlock Text="{Binding ClaimTotal, StringFormat={}{0:N2}}" Foreground="{StaticResource InkBrush}" />
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                    <TextBlock Text="Claim total: " FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding ClaimTotal, StringFormat={}{0:N2}}" VerticalAlignment="Center" />
                                     <Button Content="Refresh snapshot" Command="{Binding RefreshClaimSnapshotCommand}" Margin="16,0,0,0" />
                                 </StackPanel>
-                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="9" Margin="0,0,0,8">
-                                    <TextBlock Text="{Binding ValidationSummary}" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+                                <Border Background="{DynamicResource CanvasBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="1"
+                                        CornerRadius="4" Padding="12" Margin="0,0,0,12" AutomationProperties.Name="Validation panel">
+                                    <StackPanel>
+                                        <TextBlock Text="Validation" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                        <ItemsControl ItemsSource="{Binding ValidationRows}" AutomationProperties.LiveSetting="Polite">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <DockPanel Margin="0,0,0,4">
+                                                        <ContentControl DockPanel.Dock="Left" Content="{Binding State}" Style="{StaticResource StatusChip}" Width="70" />
+                                                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                                    </DockPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
                                 </Border>
-                                <TextBlock Text="Notes" Foreground="{StaticResource MutedBrush}" />
+                                <TextBlock Text="Notes" Style="{StaticResource FieldLabel}" />
                                 <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" MinHeight="62" TextWrapping="Wrap" />
-                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                     <Button Content="New" Command="{Binding NewPayApplicationCommand}" />
                                     <Button Content="Save" Command="{Binding SavePayApplicationCommand}" Style="{StaticResource PrimaryButton}" />
-                                    <Button Content="Delete" Command="{Binding DeletePayApplicationCommand}" />
+                                    <Button Content="Delete" Command="{Binding DeletePayApplicationCommand}" Style="{StaticResource DangerButton}" />
                                 </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
@@ -276,19 +369,19 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Approval workspace" Padding="16,9">
-                <Grid Margin="16" DataContext="{Binding ApprovalWorkflow}">
+            <TabItem Header="Compliance">
+                <Grid Margin="0,0,0,8" DataContext="{Binding ApprovalWorkflow}">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
-                        <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" />
+                    <DockPanel Grid.Row="0" Margin="0,0,0,12">
+                        <Button DockPanel.Dock="Right" Content="Refresh" Command="{Binding RefreshCommand}" Margin="0" />
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="Pay application" VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}" Margin="0,0,10,0" />
-                            <ComboBox Width="310"
+                            <TextBlock Text="Pay application" VerticalAlignment="Center" Style="{StaticResource MutedText}" Margin="0,0,8,0" />
+                            <ComboBox Width="260" Margin="0,0,12,0"
                                       ItemsSource="{Binding Applications}"
                                       SelectedItem="{Binding SelectedApplication, Mode=TwoWay}">
                                 <ComboBox.ItemTemplate>
@@ -297,7 +390,7 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
-                            <TextBlock Text="{Binding SelectedApplication.Status}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="8,0,12,0" />
+                            <ContentControl Content="{Binding SelectedApplication.Status}" Style="{StaticResource StatusChip}" Margin="0,0,16,0" />
                             <Button Content="Submit" Command="{Binding SubmitCommand}" Style="{StaticResource PrimaryButton}" />
                             <Button Content="Pass R1" Command="{Binding CompleteComplianceReviewCommand}" />
                             <Button Content="Pass R1 + R2" Command="{Binding CompleteWaiverReviewCommand}" />
@@ -308,7 +401,13 @@
                     <DataGrid Grid.Row="1" ItemsSource="{Binding Rules}" Height="178" Margin="0,0,0,10">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Rule" Binding="{Binding RuleCode}" Width="55" />
-                            <DataGridTextColumn Header="State" Binding="{Binding State}" Width="95" />
+                            <DataGridTemplateColumn Header="State" Width="130" SortMemberPath="State">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ContentControl Content="{Binding State}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="1.1*" />
                             <DataGridTextColumn Header="Comparison" Binding="{Binding Comparison}" Width="1.7*" />
                             <DataGridTextColumn Header="Result / candidate details" Binding="{Binding DetailText}" Width="1.8*" />
@@ -324,7 +423,7 @@
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <TabControl Grid.Row="2" Background="White" BorderBrush="#E2E8F0"
+                    <TabControl Grid.Row="2"
                                 SelectedIndex="{Binding SelectedEvidenceTabIndex, Mode=TwoWay}">
                         <TabItem Header="Compliance evidence">
                             <Grid Margin="12">
@@ -339,7 +438,13 @@
                                         <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="*" />
                                         <DataGridTextColumn Header="Document number" Binding="{Binding DocumentNumber}" Width="1.5*" />
                                         <DataGridTextColumn Header="Expires" Binding="{Binding ExpiryDate, StringFormat={}{0:yyyy-MM-dd}}" Width="*" />
-                                        <DataGridTextColumn Header="Today" Binding="{Binding CurrentDayStatus}" Width="*" />
+                                        <DataGridTemplateColumn Header="Today" Width="150" SortMemberPath="CurrentDayStatus">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ContentControl Content="{Binding CurrentDayStatus}" Style="{StaticResource StatusChip}" Margin="0,2" />
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
                                     </DataGrid.Columns>
                                 </DataGrid>
                                 <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
@@ -463,8 +568,8 @@
                 </Grid>
             </TabItem>
 
-            <TabItem Header="Audit history" Padding="16,9">
-                <Border Margin="16" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
+            <TabItem Header="Audit history">
+                <Border Style="{StaticResource Card}" Margin="0,0,0,8">
                     <DataGrid ItemsSource="{Binding AuditEntries}">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="When (UTC)" Binding="{Binding OccurredAt, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}" Width="1.2*" />
@@ -478,6 +583,10 @@
             </TabItem>
         </TabControl>
 
-        <TextBlock Grid.Column="1" Grid.Row="2" Text="{Binding StatusMessage}" Foreground="{StaticResource MutedBrush}" Margin="2,12,0,0" />
+        <Border Grid.Column="1" Grid.Row="2" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource DividerBrush}"
+                BorderThickness="0,1,0,0" Padding="24,8" Margin="-24,16,0,0">
+            <TextBlock Text="{Binding StatusMessage}" Foreground="{DynamicResource MutedBrush}"
+                       AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Status" />
+        </Border>
     </Grid>
 </Window>

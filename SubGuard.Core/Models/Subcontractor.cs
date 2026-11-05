@@ -10,4 +10,5 @@ public sealed record Subcontractor
     public decimal OriginalContractValue { get; init; }
     public decimal ApprovedChangeOrderTotal { get; init; }
     public decimal RetainagePercent { get; init; }
+    public int? ProjectId { get; init; }
 }
